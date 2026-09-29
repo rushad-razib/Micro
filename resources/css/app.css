@@ -1,0 +1,53 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../js/**/*.js';
+
+@theme {
+    --color-canvas: #f6f5f3;
+    --color-surface: #ffffff;
+    --color-ink: #1c1917;
+    --color-muted: #44403c;
+    --color-accent: #0f766e;
+    --color-line: #d6d3d1;
+    --color-stage: #eceae6;
+    --radius-card: 12px;
+    --radius-control: 8px;
+    --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+@layer base {
+    html {
+        @apply bg-canvas text-ink antialiased;
+    }
+
+    body {
+        @apply min-h-screen text-base;
+    }
+
+    a {
+        @apply text-accent underline-offset-2 hover:underline;
+    }
+
+    :focus-visible {
+        @apply outline-2 outline-offset-2 outline-accent;
+    }
+
+    [x-cloak] {
+        display: none !important;
+    }
+}
+
+@utility type-h1 {
+    @apply text-2xl font-semibold tracking-tight text-ink;
+}
+
+@utility type-section {
+    @apply text-lg font-semibold text-ink;
+}
+
+@utility type-label {
+    @apply text-sm text-muted;
+}

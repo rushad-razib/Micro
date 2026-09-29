@@ -1,0 +1,121 @@
+# Deploy to cPanel (tools.rushadrazib.com) on push to main.
+#
+# Required GitHub repo secrets:
+#   DEPLOY_HOST     - SSH host (e.g. rushadrazib.com or server IP)
+#   DEPLOY_USER     - SSH user (e.g. rushadra)
+#   DEPLOY_SSH_KEY  - private key whose public half is in ~/.ssh/authorized_keys
+#   DEPLOY_PATH     - /home/<user>/tools.rushadrazib.com
+#
+# Optional:
+#   DEPLOY_PORT     - SSH port (default 22)
+#
+# Create the server .env once before the first deploy. Never upload it.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, xml, ctype, json, tokenizer, fileinfo
+          coverage: none
+          tools: composer
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install PHP dependencies
+        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+
+      - name: Create application key
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Build assets
+        run: npm run build
+
+      - name: Validate registry
+        run: php artisan registry:validate
+
+      - name: Prepare deploy tree
+        run: php scripts/prepare-deploy.php
+
+      - name: Setup SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_SSH_KEY}"
+          test -n "${DEPLOY_HOST}"
+          mkdir -p ~/.ssh
+          echo "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          PORT="${DEPLOY_PORT:-22}"
+          ssh-keyscan -p "${PORT}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Upload deploy tree
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          set -euo pipefail
+          PORT="${DEPLOY_PORT:-22}"
+          SSH_OPTS=(-i ~/.ssh/deploy_key -p "${PORT}" -o IdentitiesOnly=yes -o RequestTTY=no)
+          tar -C ./deploy -czf - . | ssh "${SSH_OPTS[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "bash --noprofile --norc -c 'mkdir -p \"${DEPLOY_PATH}\" && cd \"${DEPLOY_PATH}\" && rm -rf app bootstrap config content public resources routes vendor artisan composer.json composer.lock && mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache && tar -xzf -'"
+
+      - name: Cache registry on server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          set -euo pipefail
+          PORT="${DEPLOY_PORT:-22}"
+          ssh -i ~/.ssh/deploy_key -p "${PORT}" -o IdentitiesOnly=yes -o RequestTTY=no \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            DEPLOY_PATH="${DEPLOY_PATH}" \
+            bash --noprofile --norc -s <<'REMOTE'
+          set -euo pipefail
+          cd "${DEPLOY_PATH}"
+
+          if [ ! -f .env ]; then
+            echo "Missing ${DEPLOY_PATH}/.env — create it once on the server before deploy."
+            exit 1
+          fi
+
+          mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache
+          chmod -R ug+rwx storage bootstrap/cache || true
+
+          php artisan registry:cache
+          php artisan view:cache
+          echo "Deploy finished."
+          REMOTE

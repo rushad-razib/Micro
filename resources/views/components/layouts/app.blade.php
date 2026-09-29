@@ -1,0 +1,39 @@
+@props([
+    'documentTitle',
+    'metaDescription',
+    'canonical',
+    'jsonLd' => [],
+])
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ $documentTitle }}</title>
+    <meta name="description" content="{{ $metaDescription }}">
+    <link rel="canonical" href="{{ $canonical }}">
+    <meta property="og:title" content="{{ $documentTitle }}">
+    <meta property="og:description" content="{{ $metaDescription }}">
+    <meta property="og:url" content="{{ $canonical }}">
+    <meta name="robots" content="index, follow">
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @isset($jsonLd)
+        <x-json-ld :payload="$jsonLd" />
+    @endisset
+</head>
+<body class="flex min-h-screen flex-col bg-canvas">
+    <x-site-header :site-name="$siteName" :clusters="$headerClusters" />
+
+    <main class="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6">
+        {{ $slot }}
+    </main>
+
+    <x-site-footer
+        :site-name="$siteName"
+        :tools-by-cluster="$footerToolsByCluster"
+        :clusters="$footerClusters"
+        :guides="$footerGuides"
+    />
+</body>
+</html>
