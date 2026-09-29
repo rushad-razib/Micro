@@ -9,7 +9,7 @@ Production host: `https://tools.rushadrazib.com`. There is no database and no No
 In cPanel, create the subdomain `tools.rushadrazib.com`.
 
 - Document root: `/home/<user>/tools.rushadrazib.com/public` (the Laravel `public` directory)
-- PHP version: 8.3 or newer for that subdomain
+- PHP version: **8.4** or newer for that subdomain (the lockfile needs PHP ≥ 8.4.1)
 - Enable Let's Encrypt HTTPS (same as the Learning project)
 
 Make `storage` and `bootstrap/cache` writable by the web user after the first upload.
