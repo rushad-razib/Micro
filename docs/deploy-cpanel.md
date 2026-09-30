@@ -9,10 +9,21 @@ Production host: `https://tools.rushadrazib.com`. There is no database and no No
 In cPanel, create the subdomain `tools.rushadrazib.com`.
 
 - Document root: `/home/<user>/tools.rushadrazib.com/public` (the Laravel `public` directory)
-- PHP version: **8.4** or newer for that subdomain (the lockfile needs PHP ≥ 8.4.1)
+- PHP version: **8.4** for that subdomain in **MultiPHP Manager** (web requests)
 - Enable Let's Encrypt HTTPS (same as the Learning project)
 
 Make `storage` and `bootstrap/cache` writable by the web user after the first upload.
+
+**Important:** SSH `php` on shared hosts is often still 8.2/8.3 even when MultiPHP is 8.4 for the site. Find the 8.4 binary once:
+
+```bash
+ls /usr/local/bin/ea-php84
+# or
+ls /opt/cpanel/ea-php84/root/usr/bin/php
+/usr/local/bin/ea-php84 -v
+```
+
+Put that full path in the GitHub secret `DEPLOY_PHP` (see below).
 
 ## 2. SSH deploy key
 
@@ -34,6 +45,7 @@ ssh-keygen -t ed25519 -f $env:USERPROFILE\.ssh\tools_deploy -N '""' -C "github-a
 | `DEPLOY_SSH_KEY` | full private key (`BEGIN`/`END` lines included) |
 | `DEPLOY_PATH` | `/home/<user>/tools.rushadrazib.com` |
 | `DEPLOY_PORT` | `22` (omit if default) |
+| `DEPLOY_PHP` | `/usr/local/bin/ea-php84` (or the path you found with `ls` above) |
 
 Do **not** add `DATABASE_URL` or `DEPLOY_NODE_ACTIVATE`. This app does not use MySQL or a Node process.
 
@@ -64,7 +76,7 @@ The workflow never uploads `.env`. Later deploys keep this file.
 
 Push to `main` (or Actions → Deploy → Run workflow).
 
-The job builds Composer and Vite on GitHub, validates the registry, uploads a tarball over one SSH session (cPanel often has no rsync), then runs `php artisan registry:cache` and `view:cache`. There is no migrate step.
+The job builds Composer and Vite on GitHub, validates the registry, uploads a tarball over one SSH session (cPanel often has no rsync), then runs `registry:cache` and `view:cache` with the PHP binary from `DEPLOY_PHP`. There is no migrate step.
 
 Remote commands use `bash --noprofile --norc` so login does not source `/etc/profile.d` (those scripts can fail when NPROC is tight).
 
