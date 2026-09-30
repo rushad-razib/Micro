@@ -1,3 +1,7 @@
+@php
+    $email = config('site.contact_email');
+@endphp
+
 <x-layouts.article
     :document-title="'Editorial policy — '.$siteName"
     :meta-description="'How tools and guides on this site are written.'"
@@ -5,7 +9,8 @@
 >
     <h1 class="type-h1">Editorial policy</h1>
     <div class="mt-6 max-w-3xl space-y-4 text-ink">
-        <p>Tools and guides are written by the operator. They are not paid placements at launch. We do not accept guest posts that exist to hold links.</p>
-        <p>Corrections go to [contact email].</p>
+        <p>Tools and guides are written by the operator. They are not paid placements at launch. We do not accept guest posts that exist only to hold links.</p>
+        <p>Each tool page explains what the defaults do and how files are handled. Guides answer a specific question and link to the matching tool.</p>
+        <p>Corrections go to <a href="mailto:{{ $email }}">{{ $email }}</a> or the <a href="{{ url('/contact') }}">contact form</a>.</p>
     </div>
 </x-layouts.article>

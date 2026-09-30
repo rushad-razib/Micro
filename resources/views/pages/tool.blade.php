@@ -60,10 +60,12 @@
             <div
                 class="mt-6 rounded-card border border-line bg-surface p-4 sm:p-6"
                 data-engine="{{ $tool->engine }}"
+                data-tool="{{ $tool->id }}"
+                data-suffix="{{ $tool->suffix }}"
                 data-preset="{{ $defaultFrame?->key }}"
                 data-limits="{{ json_encode($tool->limits) }}"
             >
-                <x-drop-zone />
+                <x-tool-island :tool="$tool" :default-frame="$defaultFrame" />
                 <div class="mt-4">
                     <x-privacy-sentence />
                 </div>

@@ -10,7 +10,6 @@ class PageController extends Controller
     {
         $views = [
             'about' => 'pages.about',
-            'contact' => 'pages.contact',
             'privacy' => 'pages.privacy',
             'cookies' => 'pages.cookies',
             'terms' => 'pages.terms',

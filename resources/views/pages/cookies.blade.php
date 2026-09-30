@@ -5,8 +5,9 @@
 >
     <h1 class="type-h1">Cookies</h1>
     <div class="mt-6 max-w-3xl space-y-4 text-ink">
-        <p>The image tools do not need cookies.</p>
-        <p>Necessary cookies may appear later for a contact form flash message. Analytics and advertising cookies stay off until you choose them and those features exist.</p>
+        <p>The image tools do not need cookies. Image bytes never leave your browser for the launch tools.</p>
+        <p>A session cookie may be set when you submit the contact form so we can show a success or error message. That cookie is necessary for the form to work.</p>
+        <p>Analytics and advertising cookies stay off until you choose them and those features exist.</p>
         <p>See the <a href="{{ url('/privacy') }}">privacy page</a> for how data is handled.</p>
     </div>
 </x-layouts.article>

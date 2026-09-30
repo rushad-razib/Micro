@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CatalogController;
+use App\Http\Controllers\ContactController;
 use App\Http\Controllers\GuideController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\PageController;
@@ -15,7 +16,8 @@ Route::get('/guides/{slug}', GuideController::class)
     ->name('guides.show');
 
 Route::get('/about', PageController::class)->defaults('page', 'about')->name('about');
-Route::get('/contact', PageController::class)->defaults('page', 'contact')->name('contact');
+Route::get('/contact', [ContactController::class, 'show'])->name('contact');
+Route::post('/contact', [ContactController::class, 'store'])->name('contact.store');
 Route::get('/privacy', PageController::class)->defaults('page', 'privacy')->name('privacy');
 Route::get('/cookies', PageController::class)->defaults('page', 'cookies')->name('cookies');
 Route::get('/terms', PageController::class)->defaults('page', 'terms')->name('terms');

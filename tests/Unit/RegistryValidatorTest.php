@@ -62,6 +62,45 @@ class RegistryValidatorTest extends TestCase
         $this->addToAssertionCount(1);
     }
 
+    public function test_it_rejects_guide_slugs_in_related(): void
+    {
+        $validator = new RegistryValidator(['canvas-transform']);
+
+        try {
+            $validator->validate(
+                [$this->cluster()],
+                [$this->tool(['related' => ['webp-vs-jpeg']])],
+                [['slug' => 'webp-vs-jpeg', 'title' => 'Guide', 'seo_title' => 'Guide', 'seo_description' => 'Desc', 'updated' => '2026-09-30', 'status' => 'draft', 'body_markdown' => '#']],
+            );
+            $this->fail('Expected RegistryException');
+        } catch (RegistryException $exception) {
+            $this->assertTrue(
+                collect($exception->errors)->contains(fn (string $error) => str_contains($error, 'not a tool id')),
+            );
+        }
+    }
+
+    public function test_it_rejects_duplicate_seo_titles(): void
+    {
+        $validator = new RegistryValidator(['canvas-transform']);
+
+        try {
+            $validator->validate(
+                [$this->cluster()],
+                [
+                    $this->tool(['id' => 'resize-image', 'slug' => 'resize-image', 'seo_title' => 'Same Title']),
+                    $this->tool(['id' => 'crop-image', 'slug' => 'crop-image', 'seo_title' => 'Same Title']),
+                ],
+                [],
+            );
+            $this->fail('Expected RegistryException');
+        } catch (RegistryException $exception) {
+            $this->assertTrue(
+                collect($exception->errors)->contains(fn (string $error) => str_contains($error, 'Duplicate seo_title')),
+            );
+        }
+    }
+
     /**
      * @return array<string, mixed>
      */

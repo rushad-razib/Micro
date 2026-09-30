@@ -1,0 +1,35 @@
+# Mobile Lighthouse on production tool URLs (manual / after deploy).
+#
+# Required secret (or env):
+#   LIGHTHOUSE_BASE_URL  - e.g. https://tools.rushadrazib.com
+#
+# Not run on every push — Phase C lab gate only.
+
+name: Lighthouse
+
+on:
+  workflow_dispatch:
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Lighthouse CI
+        run: npm install --no-save @lhci/cli@0.14.0
+
+      - name: Run mobile Lighthouse
+        env:
+          LIGHTHOUSE_BASE_URL: ${{ secrets.LIGHTHOUSE_BASE_URL }}
+        run: |
+          set -euo pipefail
+          test -n "${LIGHTHOUSE_BASE_URL}"
+          BASE="${LIGHTHOUSE_BASE_URL%/}"
+          npx lhci autorun --config=./lighthouserc.cjs

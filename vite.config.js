@@ -10,6 +10,12 @@ export default defineConfig({
         }),
         tailwindcss(),
     ],
+    optimizeDeps: {
+        exclude: ['@jsquash/jpeg', '@jsquash/webp', '@jsquash/oxipng'],
+    },
+    worker: {
+        format: 'es',
+    },
     server: {
         watch: {
             ignored: ['**/storage/framework/views/**'],

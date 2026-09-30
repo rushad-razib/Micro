@@ -72,6 +72,20 @@ final class RegistryValidator
             }
         }
 
+        $seoTitles = [];
+
+        foreach ($guides as $guide) {
+            $title = $guide['seo_title'] ?? null;
+            if (is_string($title) && $title !== '') {
+                $key = mb_strtolower($title);
+                if (isset($seoTitles[$key])) {
+                    $errors[] = 'Duplicate seo_title "'.$title.'" (guide '.$this->label($guide, 'slug').' and '.$seoTitles[$key].').';
+                } else {
+                    $seoTitles[$key] = 'guide '.$this->label($guide, 'slug');
+                }
+            }
+        }
+
         foreach ($tools as $tool) {
             $label = $this->label($tool, 'id');
 
@@ -97,6 +111,16 @@ final class RegistryValidator
                     $errors[] = 'Duplicate tool slug '.$tool['slug'].'.';
                 }
                 $toolSlugs[$tool['slug']] = true;
+            }
+
+            $seoTitle = $tool['seo_title'] ?? null;
+            if (is_string($seoTitle) && $seoTitle !== '') {
+                $key = mb_strtolower($seoTitle);
+                if (isset($seoTitles[$key])) {
+                    $errors[] = 'Duplicate seo_title "'.$seoTitle.'" (tool '.$label.' and '.$seoTitles[$key].').';
+                } else {
+                    $seoTitles[$key] = 'tool '.$label;
+                }
             }
 
             if (isset($tool['status']) && ! in_array($tool['status'], ['draft', 'live'], true)) {
@@ -154,8 +178,8 @@ final class RegistryValidator
                     continue;
                 }
 
-                if (! isset($toolIds[$related]) && ! isset($guideSlugs[$related])) {
-                    $errors[] = "Tool {$label} related entry {$related} is not a tool id or guide slug.";
+                if (! isset($toolIds[$related])) {
+                    $errors[] = "Tool {$label} related entry {$related} is not a tool id.";
                 }
             }
         }
