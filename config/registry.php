@@ -17,6 +17,8 @@ return [
         'canvas-transform',
         'squoosh-compress',
         'metadata-strip',
+        'pdf-toolkit',
+        'office-convert',
     ],
 
     'policy_paths' => [

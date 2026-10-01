@@ -10,18 +10,20 @@ class HomeController extends Controller
 {
     public function __invoke(ToolRegistry $registry): View
     {
-        $cluster = $registry->clusterBySlug('images');
-        $tools = $cluster
-            ? $registry->listedToolsIn($cluster->id)->reject(fn (Tool $tool) => $tool->isPreset())
-            : collect();
-        $presets = $cluster
-            ? $registry->listedToolsIn($cluster->id)->filter(fn (Tool $tool) => $tool->isPreset())
-            : collect();
+        $clusters = $registry->headerClusters();
+
+        $sections = $clusters->map(function ($cluster) use ($registry) {
+            $listed = $registry->listedToolsIn($cluster->id);
+
+            return [
+                'cluster' => $cluster,
+                'tools' => $listed->reject(fn (Tool $tool) => $tool->isPreset())->values(),
+                'presets' => $listed->filter(fn (Tool $tool) => $tool->isPreset())->values(),
+            ];
+        })->values();
 
         return view('pages.home', [
-            'cluster' => $cluster,
-            'tools' => $tools,
-            'presets' => $presets,
+            'sections' => $sections,
             'guides' => $registry->listedGuides(),
         ]);
     }

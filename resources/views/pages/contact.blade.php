@@ -38,7 +38,7 @@
                 <p class="mt-1 text-sm text-ink">{{ $message }}</p>
             @enderror
         </div>
-        <button type="submit" class="min-h-11 rounded-control bg-accent px-4 text-surface">
+        <button type="submit" class="min-h-11 rounded-control bg-accent px-4 text-on-accent">
             Send message
         </button>
     </form>

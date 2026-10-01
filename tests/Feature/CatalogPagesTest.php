@@ -58,6 +58,52 @@ class CatalogPagesTest extends TestCase
         }
     }
 
+    public function test_document_cluster_urls_are_live(): void
+    {
+        config(['registry.show_drafts' => false]);
+
+        foreach ([
+            '/documents',
+            '/merge-pdf',
+            '/split-pdf',
+            '/images-to-pdf',
+            '/rotate-pdf',
+            '/word-to-pdf',
+            '/pdf-to-word',
+            '/guides/merge-pdfs-in-your-browser',
+            '/guides/convert-word-and-pdf-in-your-browser',
+        ] as $path) {
+            $this->get($path)->assertOk();
+        }
+
+        $this->get('/merge-pdf')
+            ->assertSee('data-engine="pdf-toolkit"', false)
+            ->assertSee('Files you open are processed in your browser', false)
+            ->assertSee('documentIsland', false);
+
+        $this->get('/word-to-pdf')
+            ->assertSee('data-engine="office-convert"', false)
+            ->assertSee('documentIsland', false);
+    }
+
+    public function test_header_mega_menu_lists_cluster_tools(): void
+    {
+        config(['registry.show_drafts' => false]);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('Image tools', false)
+            ->assertSee('PDF tools', false)
+            ->assertSee('Compress image', false)
+            ->assertSee('Merge PDF', false)
+            ->assertSee(url('/compress-image'), false)
+            ->assertSee(url('/merge-pdf'), false)
+            ->assertSee('All image tools', false)
+            ->assertSee('All pdf tools', false)
+            ->assertSee('grid-template-columns: repeat(2', false)
+            ->assertSee('width: min(calc(100vw - 2rem), 28rem)', false);
+    }
+
     public function test_policy_pages_are_available(): void
     {
         $this->get('/about')->assertOk()->assertSee('Rushad Razib', false);

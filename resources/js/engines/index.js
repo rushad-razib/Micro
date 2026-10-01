@@ -2,6 +2,8 @@ const engines = {
     'canvas-transform': () => import('./canvas-transform.js'),
     'metadata-strip': () => import('./metadata-strip.js'),
     'squoosh-compress': () => import('./squoosh-compress.js'),
+    'pdf-toolkit': () => import('./pdf-toolkit.js'),
+    'office-convert': () => import('./office-convert.js'),
 };
 
 /**

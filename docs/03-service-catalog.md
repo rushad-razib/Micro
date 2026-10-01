@@ -83,21 +83,39 @@ These stay out until a later review says ads cover the cost, or a policy review 
 | Bulk ZIP of many images | Memory pressure on phones; easy to push work onto the server |
 | NSFW, face swap, watermark stripping | AdSense and legal risk |
 
-## Candidate clusters (not scheduled)
+## Documents cluster — PDF tools
 
-A second cluster is documented so the information architecture has a place to put it. It is not a commitment.
+Shipped as a second live cluster (early expansion). Browser only. Hub slug `/documents`. Header label **PDF tools**.
+
+| ID | Public job | URL slug | Engine | Notes |
+| --- | --- | --- | --- | --- |
+| `merge-pdf` | Merge PDF files | `merge-pdf` | `pdf-toolkit` | Order follows drop order |
+| `split-pdf` | Extract a page range | `split-pdf` | `pdf-toolkit` | One output PDF |
+| `images-to-pdf` | Images to PDF | `images-to-pdf` | `pdf-toolkit` | Bridges the image cluster |
+| `rotate-pdf` | Rotate PDF pages | `rotate-pdf` | `pdf-toolkit` | 90° / 180° / 270° |
+| `word-to-pdf` | Word to PDF | `word-to-pdf` | `office-convert` | DOCX; text-focused fidelity |
+| `pdf-to-word` | PDF to Word | `pdf-to-word` | `office-convert` | Needs a text layer; no OCR |
+
+### Documents guides
+
+| Slug | Job of the page |
+| --- | --- |
+| `guides/merge-pdfs-in-your-browser` | How merge works privately, with links to PDF tools |
+| `guides/convert-word-and-pdf-in-your-browser` | Word↔PDF limits and when to use each tool |
+
+## Candidate clusters (not scheduled)
 
 | Cluster | Example services | Why it can wait |
 | --- | --- | --- |
-| Documents | Merge PDF, split PDF, images to PDF | Heavier engines, crowded queries, different privacy copy if files are parsed in WASM |
 | Text and developer utilities | Word count, JSON format, Base64 | Different interaction than a drop zone; still must meet the "no account, one primary action" rule |
 
-A candidate cluster is linked from the homepage only when its hub and at least four live tools exist. One orphan tool stays unlisted on the homepage and can still have a URL if it was admitted.
+A candidate cluster is linked from the homepage only when its hub and at least four live tools exist.
 
-## Homepage and hub contents at launch
+## Homepage and hub contents
 
-- Homepage: the image cluster only, with the six tools and four preset pages grouped as "Social sizes".
-- Cluster hub `/images`: the same list, plus links to the three guides.
+- Homepage: image tools (and social presets), then PDF tools when live, plus guides.
+- Cluster hubs `/images` and `/documents`: tools for that cluster and relevant guides.
+- Header: mega menu per live cluster (Image tools / PDF tools), listing live tools from the registry.
 - No empty clusters, no "coming soon" tool cards.
 
 ## What a later build must not violate

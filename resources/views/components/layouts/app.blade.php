@@ -34,13 +34,17 @@
         @endisset
     </head>
     <body
-        class="flex min-h-screen flex-col bg-canvas"
+        class="flex min-h-screen flex-col"
         data-consent-provider="{{ config('site.consent_provider') }}"
         data-adsense-client="{{ config('site.adsense.client_id') }}"
         data-adsense-slot="{{ config('site.adsense.slot') }}"
         data-consent-storage-key="{{ config('site.consent_storage_key') }}"
     >
-        <x-site-header :site-name="$siteName" :clusters="$headerClusters" />
+        <x-site-header
+            :site-name="$siteName"
+            :clusters="$headerClusters"
+            :tools-by-cluster="$headerToolsByCluster"
+        />
 
         <main class="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6">
             {{ $slot }}

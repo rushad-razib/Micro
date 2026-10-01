@@ -102,9 +102,13 @@ final class ToolRegistry
      */
     public function headerClusters(): Collection
     {
+        $order = ['images' => 0, 'documents' => 1];
+
         return $this->clusters()
             ->filter(fn (Cluster $cluster) => $cluster->isLive())
-            ->filter(fn (Cluster $cluster) => $this->liveToolsIn($cluster->id)->isNotEmpty());
+            ->filter(fn (Cluster $cluster) => $this->liveToolsIn($cluster->id)->isNotEmpty())
+            ->sortBy(fn (Cluster $cluster) => $order[$cluster->id] ?? 100)
+            ->values();
     }
 
     /**

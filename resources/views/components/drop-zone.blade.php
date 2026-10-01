@@ -5,7 +5,7 @@
 >
     <p class="text-ink">Drop an image, paste, or browse</p>
     <p class="mt-2 type-label">JPEG, PNG, WebP, or GIF. Stays on this device.</p>
-    <label class="mt-6 inline-flex min-h-11 min-w-44 cursor-pointer items-center justify-center rounded-control bg-accent px-4 text-surface">
+    <label class="mt-6 inline-flex min-h-11 min-w-44 cursor-pointer items-center justify-center rounded-control bg-accent px-4 text-on-accent">
         <span>Browse files</span>
         <input
             type="file"

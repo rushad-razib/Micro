@@ -47,7 +47,18 @@ Phase 1, loaded only by the engine that needs them:
 
 Pin versions in the lockfile. Load codecs dynamically from the compress page so resize, crop, rotate, convert, and strip do not download them.
 
-Phase 2, not installed for launch:
+Documents cluster (PDF / Office), loaded only by those engines:
+
+| Package | Engine | Why it is allowed |
+| --- | --- | --- |
+| `pdf-lib` | `pdf-toolkit` | Merge, split, rotate, images→PDF, and writing PDF from Word text in the browser |
+| `pdfjs-dist` | `office-convert` | Text-layer extraction for PDF→Word. Not loaded on image tools |
+| `mammoth` | `office-convert` | Read DOCX text/structure for Word→PDF |
+| `docx` | `office-convert` | Build a downloadable DOCX for PDF→Word |
+
+Dynamic-import these only from Documents engines so image pages do not download them. Word↔PDF is best-effort for text-heavy files; no OCR and no server LibreOffice.
+
+Phase 2 image tools, not installed yet:
 
 | Package | Future engine | Why it waits |
 | --- | --- | --- |

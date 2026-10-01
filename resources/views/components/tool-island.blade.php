@@ -28,7 +28,7 @@
         >
             <p class="text-ink">Drop an image, paste, or browse</p>
             <p class="mt-2 type-label">JPEG, PNG, WebP, or GIF. Stays on this device.</p>
-            <label class="mt-6 inline-flex min-h-11 min-w-44 cursor-pointer items-center justify-center rounded-control bg-accent px-4 text-surface">
+            <label class="mt-6 inline-flex min-h-11 min-w-44 cursor-pointer items-center justify-center rounded-control bg-accent px-4 text-on-accent">
                 <span>Browse files</span>
                 <input
                     type="file"
@@ -150,7 +150,7 @@
             <div x-show="isCrop" class="space-y-3" x-cloak>
                 <div class="flex flex-wrap gap-2">
                     <template x-for="ratio in ['free', '1:1', '4:5', '16:9']" :key="ratio">
-                        <button type="button" class="min-h-11 rounded-control border border-line px-3" :class="options.ratio === ratio ? 'bg-accent text-surface' : 'bg-surface'" @click="setCropRatio(ratio)" x-text="ratio === 'free' ? 'Free' : ratio"></button>
+                        <button type="button" class="min-h-11 rounded-control border border-line px-3" :class="options.ratio === ratio ? 'bg-accent text-on-accent' : 'bg-surface'" @click="setCropRatio(ratio)" x-text="ratio === 'free' ? 'Free' : ratio"></button>
                     </template>
                 </div>
                 <p class="type-label" x-show="options.rect">
@@ -178,12 +178,12 @@
             <div x-show="isPreset" class="space-y-3" x-cloak>
                 <div class="flex flex-wrap gap-2" x-show="presets.length > 1">
                     <template x-for="frame in presets" :key="frame.key">
-                        <button type="button" class="min-h-11 rounded-control border border-line px-3" :class="options.frameKey === frame.key ? 'bg-accent text-surface' : 'bg-surface'" @click="setPresetFrame(frame.key)" x-text="frame.label"></button>
+                        <button type="button" class="min-h-11 rounded-control border border-line px-3" :class="options.frameKey === frame.key ? 'bg-accent text-on-accent' : 'bg-surface'" @click="setPresetFrame(frame.key)" x-text="frame.label"></button>
                     </template>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <button type="button" class="min-h-11 rounded-control border border-line px-3" :class="options.mode === 'cover' ? 'bg-accent text-surface' : 'bg-surface'" @click="setPresetMode('cover')">Fill frame</button>
-                    <button type="button" class="min-h-11 rounded-control border border-line px-3" :class="options.mode === 'contain' ? 'bg-accent text-surface' : 'bg-surface'" @click="setPresetMode('contain')">Fit inside</button>
+                    <button type="button" class="min-h-11 rounded-control border border-line px-3" :class="options.mode === 'cover' ? 'bg-accent text-on-accent' : 'bg-surface'" @click="setPresetMode('cover')">Fill frame</button>
+                    <button type="button" class="min-h-11 rounded-control border border-line px-3" :class="options.mode === 'contain' ? 'bg-accent text-on-accent' : 'bg-surface'" @click="setPresetMode('contain')">Fit inside</button>
                 </div>
                 <p class="type-label">Need arbitrary dimensions? Use <a :href="parentResizeHref">resize image</a>.</p>
             </div>
@@ -217,7 +217,7 @@
                     x-show="downloadUrl"
                     :href="downloadUrl"
                     :download="downloadFilename"
-                    class="inline-flex min-h-11 w-full items-center justify-center rounded-control bg-accent px-4 text-surface no-underline sm:flex-1"
+                    class="inline-flex min-h-11 w-full items-center justify-center rounded-control bg-accent px-4 text-on-accent no-underline sm:flex-1"
                 >
                     Download <span class="ml-1 truncate" x-text="downloadFilename"></span>
                 </a>

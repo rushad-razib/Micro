@@ -4,7 +4,7 @@
         x-cloak
         x-show="open"
         x-transition.opacity
-        class="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-surface shadow-[0_-4px_24px_rgba(28,25,23,0.08)]"
+        class="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-surface shadow-[0_-4px_24px_rgba(0,0,0,0.45)]"
         role="dialog"
         aria-modal="false"
         aria-labelledby="consent-banner-title"
@@ -38,7 +38,7 @@
             <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                 <button
                     type="button"
-                    class="inline-flex min-h-11 items-center justify-center rounded-control bg-accent px-4 text-surface"
+                    class="inline-flex min-h-11 items-center justify-center rounded-control bg-accent px-4 text-on-accent"
                     @click="acceptAll()"
                 >
                     Accept all

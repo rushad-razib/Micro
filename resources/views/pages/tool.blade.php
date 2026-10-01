@@ -65,9 +65,13 @@
                 data-preset="{{ $defaultFrame?->key }}"
                 data-limits="{{ json_encode($tool->limits) }}"
             >
-                <x-tool-island :tool="$tool" :default-frame="$defaultFrame" />
+                @if ($tool->cluster === 'documents')
+                    <x-document-island :tool="$tool" />
+                @else
+                    <x-tool-island :tool="$tool" :default-frame="$defaultFrame" />
+                @endif
                 <div class="mt-4">
-                    <x-privacy-sentence />
+                    <x-privacy-sentence :kind="$tool->cluster === 'documents' ? 'document' : 'image'" />
                 </div>
             </div>
         </div>

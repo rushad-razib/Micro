@@ -90,8 +90,7 @@ Preset pages use the same layout. The H1 names the platform job. Options open wi
 **Header**
 
 - Wordmark to `/`.
-- One cluster link, "Images", to `/images`, generated from clusters that have at least one live tool.
-- No tool mega-menu at launch. Six tools plus four presets fit on the hub. A mega-menu arrives only when a second cluster is live.
+- Mega menu: one top-level item per live cluster with tools (**Image tools**, **PDF tools**). Each panel lists that cluster’s live tools from the registry and a link to the cluster hub. No hand-maintained nav lists.
 
 **Footer**
 

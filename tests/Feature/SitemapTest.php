@@ -17,7 +17,10 @@ class SitemapTest extends TestCase
         $response->assertSee(url('/compress-image'), false);
         $response->assertSee(url('/resize-image'), false);
         $response->assertSee(url('/youtube-thumbnail-resizer'), false);
+        $response->assertSee(url('/merge-pdf'), false);
+        $response->assertSee(url('/documents'), false);
         $response->assertSee(url('/guides/webp-vs-jpeg'), false);
+        $response->assertSee(url('/guides/merge-pdfs-in-your-browser'), false);
         $response->assertSee(url('/'), false);
         $response->assertSee(url('/about'), false);
         $response->assertDontSee('favicon-generator', false);

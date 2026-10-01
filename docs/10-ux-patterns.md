@@ -10,7 +10,7 @@ Ease of use is a release rule, equal to SEO and the module contract.
 
 The interface is calm and current: space over decoration, a short type scale, one accent, soft borders. The image sits on a neutral stage so the photo is not tinted by the chrome.
 
-**Launch theme is light.** People judge skin tones and whites against a light ground. A dark theme may be added later as an optional preference. It is not required for launch, and image previews still sit on a neutral stage if it ships.
+**Default theme is dark.** Page chrome uses a near-black canvas with teal accent. Image previews sit on a darker neutral `stage` so photo whites and skin tones stay readable against the tool chrome.
 
 **The tool is the hero.** There is no marketing banner, slideshow, or long pitch above the drop zone. The H1 and one sentence sit above the work area. The guide begins below the download.
 
@@ -20,13 +20,14 @@ Implement these as Tailwind theme values so a later tool cannot hard-code a seco
 
 | Token | Role | Launch value |
 | --- | --- | --- |
-| `canvas` | Page background | Warm off-white, near `#f6f5f3` |
-| `surface` | Tool card | White |
-| `ink` | Primary text | Near-black, not pure `#000` |
-| `muted` | Secondary text | Stone gray with contrast at least 4.5:1 on `canvas` for body and on `surface` for labels |
-| `accent` | Primary button, focus ring | One deep teal or blue, used only for the primary action and links |
-| `line` | Borders | Low-contrast warm gray |
-| `stage` | Behind the image preview | Neutral `#eceae6`, never the accent |
+| `canvas` | Page background | Near-black green-gray, near `#111413` |
+| `surface` | Tool card / header | Elevated dark panel, near `#1a1f1e` |
+| `ink` | Primary text | Near-white stone |
+| `muted` | Secondary text | Mid stone with contrast at least 4.5:1 on `canvas` / `surface` |
+| `accent` | Primary button, focus ring | Bright teal, used for primary actions and links |
+| `on-accent` | Text on accent fills | Near-black teal so labels stay readable on the bright button |
+| `line` | Borders | Low-contrast dark gray |
+| `stage` | Behind the image preview | Darker than surface, never the accent |
 | Radius | Cards and controls | One modest radius, about 12px on the card and 8px on controls |
 | Space | Stacking | 8px base. The work area has more padding than the guide |
 | Type | UI | A single sans family already common on the OS stack, or one webfont with a metric-matched fallback. No display face in the tool |

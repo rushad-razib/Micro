@@ -28,6 +28,7 @@ class AppServiceProvider extends ServiceProvider
             $view->with([
                 'siteName' => config('app.name'),
                 'headerClusters' => $registry->headerClusters(),
+                'headerToolsByCluster' => $registry->liveToolsByCluster(),
                 'footerToolsByCluster' => $registry->liveToolsByCluster(),
                 'footerClusters' => $registry->clusters()->keyBy('id'),
                 'footerGuides' => $registry->guides()->filter(fn ($guide) => $guide->isLive()),
