@@ -1,6 +1,6 @@
 @props(['siteName', 'clusters', 'toolsByCluster'])
 
-<header class="site-chrome relative z-40 border-b" x-data="{ open: null }" @keydown.escape.window="open = null">
+<header class="site-chrome sticky top-0 z-40 border-b" x-data="{ open: null }" @keydown.escape.window="open = null">
     <div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <a href="{{ url('/') }}" class="text-lg font-semibold text-chrome-ink no-underline hover:text-white">{{ $siteName }}</a>
         <nav aria-label="Primary" class="flex items-center gap-1 sm:gap-2">
@@ -28,7 +28,7 @@
                         x-cloak
                         x-show="open === '{{ $cluster->id }}'"
                         x-transition.opacity
-                        class="absolute right-0 top-full z-50 max-w-[calc(100vw-2rem)] rounded-card border border-line bg-surface p-3 shadow-sm"
+                        class="site-chrome absolute right-0 top-full z-50 max-w-[calc(100vw-2rem)] rounded-card border p-3 shadow-lg"
                         style="width: min(calc(100vw - 2rem), {{ $panelWidthRem }}rem);"
                         @click.outside="open = null"
                     >
@@ -42,7 +42,7 @@
                                         <li>
                                             <a
                                                 href="{{ url('/'.$tool->slug) }}"
-                                                class="block whitespace-nowrap rounded-control px-3 py-2 text-sm text-ink no-underline hover:bg-canvas"
+                                                class="block whitespace-nowrap rounded-control px-3 py-2 text-sm text-chrome-ink no-underline hover:bg-black/20 hover:text-white"
                                             >
                                                 {{ $tool->title }}
                                             </a>
@@ -51,8 +51,8 @@
                                 </ul>
                             @endforeach
                         </div>
-                        <p class="mt-2 border-t border-line pt-2">
-                            <a href="{{ url('/'.$cluster->slug) }}" class="type-label no-underline hover:text-accent">
+                        <p class="mt-2 border-t border-white/20 pt-2">
+                            <a href="{{ url('/'.$cluster->slug) }}" class="site-chrome-muted text-sm no-underline hover:text-white">
                                 All {{ strtolower($cluster->title) }}
                             </a>
                         </p>
