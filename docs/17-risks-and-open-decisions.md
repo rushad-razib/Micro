@@ -8,36 +8,39 @@ This document lists decisions still open and the risks that can waste the build.
 
 ### Brand name
 
-The docs say "the image-tools site" on purpose. Choose a public name before launch copy is final (phase B, policy and about pages).
-
-Criteria:
+Production uses the working name **Image tools** on host `tools.rushadrazib.com`. A distinct public brand (and matching apex domain) can still replace the prefix later; H1s stay job titles. Criteria if renaming:
 
 - Short, spellable, and available as a domain you can actually buy.
 - Not easily confused with a well-known editor or a trademark in image software. Search the name before buying.
 - Usable after a second cluster exists. A name locked to "JPEG" or "PNG" fights later document or text tools. A name locked to a single verb ("Compresso") fights crop, strip, and future clusters.
 - Available as a social handle only if you will use it. Do not block the name on unused networks.
 
-Until the name exists, page titles in specs are job titles ("Compress image"), which remain correct under any brand. The site name is a prefix or suffix, not a replacement for the H1.
+### Operator country
+
+Operator name and contact email are set (`SITE_OPERATOR_NAME`, `SITE_CONTACT_EMAIL`). Add a country (or "personal project in …") on privacy/terms if a reviewer or local law needs it. Do not invent a company or street address.
+
+## Decisions closed in phase D
 
 ### Domain and canonical host
 
-Buy the domain when the name is chosen. Decide apex or `www` before the first production deploy and redirect the other. Set this in the deploy notes and in canonical tags.
+Canonical production host is `https://tools.rushadrazib.com` (HTTPS only). The app redirects other hosts and `http` when `APP_ENV=production`.
 
-### Operator identity
+### Operator identity (name and email)
 
-Privacy and terms need a real operator name, contact email, and country. If the site is a personal project, say so. Do not invent a company. Resolve this before phase D, and before phase B if the about page is written then.
+Operated by Rushad Razib; contact `hello@rushadrazib.com` via env/config. Personal project — no invented company.
 
 ### Analytics vendor
 
-Choose one product from the options in [12-analytics-kpis.md](12-analytics-kpis.md) before adding the script. Record the cookie names on `/cookies` at that moment.
+No on-site analytics script for the AdSense-ready release. Visit monitoring is Cloudflare (CDN/edge). A product from [12-analytics-kpis.md](12-analytics-kpis.md) may be added later behind the Analytics consent toggle; record cookie names on `/cookies` at that moment.
 
 ### Consent vendor
 
-A managed CMP or a small first-party banner both satisfy the behavior spec. Choose before ad tags exist. The behavior (Consent Mode v2, tool works when ads are denied) is already decided.
+**Pre-approval:** first-party Alpine banner + Consent Mode v2 defaults (`CONSENT_PROVIDER=first_party`).  
+**Post-approval:** Google Privacy & messaging (certified CMP); set `CONSENT_PROVIDER=google` so the first-party banner is hidden. Behavior requirement unchanged: tool works when ads are denied; dual CMPs must not run together.
 
 ### Mail transport
 
-Pick the SMTP provider when the contact form is built. Rate-limit regardless of vendor.
+SMTP (or the host mailer) is configured for the contact form. Rate-limit remains regardless of vendor.
 
 ## Risks
 
@@ -50,12 +53,13 @@ Pick the SMTP provider when the contact form is built. Rate-limit regardless of 
 | Codec weight | Squoosh on every page hurts LCP | Dynamic import on compress only. Verified in phase B |
 | Phone memory | Large images freeze mobile browsers | 25 MB and 8192 px limits, plain errors |
 | Duplicate social URLs | Doorway-page pattern | Four presets only, each with its own copy. Further sizes are chips |
-| Fake social proof | Invented users, reviews, or company details | Copy rules in the SEO doc. Open decision on the real operator |
+| Fake social proof | Invented users, reviews, or company details | Copy rules in the SEO doc. Real operator only |
 | Package sprawl | Random image libraries, paid APIs | Allowlist in the stack doc. New packages edit that doc first |
 | Database drift | Two sources of truth | Files only until ADR 005's condition is met |
 | Legal overconfidence | These docs are a product policy | Human review of privacy, cookies, and terms before AdSense |
 | HEIC demand at launch | iPhone visitors bounce | The page errors clearly, points at JPEG export, and phase 2 can add HEIC in the browser. Do not add a server converter to paper over this |
 | AdSense disapproval or low RPM | The project can be correct and still earn little for months | Do not respond by launching unrelated thin tools. Improve the existing pages and vitals |
+| Dual consent UIs | Confusing choice and CMP conflicts | Flip `CONSENT_PROVIDER` when Privacy & messaging is enabled |
 
 ## Decisions already closed
 

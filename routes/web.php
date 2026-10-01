@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdsTxtController;
 use App\Http\Controllers\CatalogController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\GuideController;
@@ -25,6 +26,7 @@ Route::get('/editorial-policy', PageController::class)->defaults('page', 'editor
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
 Route::get('/robots.txt', RobotsController::class)->name('robots');
+Route::get('/ads.txt', AdsTxtController::class)->name('ads-txt');
 
 Route::get('/{slug}', CatalogController::class)
     ->where('slug', '[a-z0-9-]+')

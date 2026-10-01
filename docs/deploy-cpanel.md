@@ -73,11 +73,14 @@ MAIL_FROM_NAME="${APP_NAME}"
 SITE_OPERATOR_NAME="Rushad Razib"
 SITE_CONTACT_EMAIL="hello@rushadrazib.com"
 GOOGLE_SITE_VERIFICATION=
+CONSENT_PROVIDER=first_party
+ADSENSE_CLIENT_ID=
+ADSENSE_SLOT=
 LOG_CHANNEL=stack
 LOG_STACK=single
 ```
 
-Leave `DB_*` unset. `REGISTRY_SHOW_DRAFTS` stays empty so production 404s draft tools. Set `GOOGLE_SITE_VERIFICATION` to the HTML-tag token from Search Console when you have it.
+Leave `DB_*` unset. `REGISTRY_SHOW_DRAFTS` stays empty so production 404s draft tools. Set `GOOGLE_SITE_VERIFICATION` to the HTML-tag token from Search Console when you have it. Keep `ADSENSE_*` empty until AdSense approval. Keep `CONSENT_PROVIDER=first_party` until Privacy & messaging is live.
 
 The workflow never uploads `.env`. Later deploys keep this file.
 
@@ -123,6 +126,29 @@ When Search Console reports issues, fix in the registry/content (not by adding d
 - Duplicate titles → unique `seo_title` (validator rejects duplicates)
 - Excluded draft / soft 404 → keep drafts out of sitemap; live URLs must return real HTML with an H1
 - Do not publish phase 2 tools during Phase C
+
+## 9. Phase D — AdSense apply gate (before you click Apply)
+
+Confirm on production:
+
+1. Consent banner appears for new visitors; **Reject non-essential** still lets a tool download.
+2. `/cookies` and `/privacy` name the real operator and describe categories / Consent Mode / Cloudflare edge traffic.
+3. Contact form delivers mail. No phase 2 or draft tools are live. No doorway URLs.
+4. Ad slots stay empty (reserved height only). `/ads.txt` returns **404** while `ADSENSE_CLIENT_ID` is empty — do not invent a publisher line.
+5. Search Console property and sitemap are submitted (Phase C). Prefer waiting until live URLs have been requested for indexing.
+
+Then apply in AdSense. Do not load ad scripts before approval.
+
+## 10. After AdSense approval
+
+1. Set `ADSENSE_CLIENT_ID` (e.g. `ca-pub-…`) and `ADSENSE_SLOT` on the server `.env`.
+2. Confirm `https://tools.rushadrazib.com/ads.txt` returns the Google publisher line.
+3. In AdSense → **Privacy & messaging**, create the consent message for required regions (EEA/UK and others as needed).
+4. Set `CONSENT_PROVIDER=google` so the first-party banner is hidden (only one CMP).
+5. Purge the CDN HTML cache. Spot-check a tool page: reserved slot can fill; Reject/deny still leaves the tool usable.
+6. Watch the AdSense policy center. Fix pages; do not add doorway URLs.
+
+Traffic: use Cloudflare analytics/overview for visit counts. No on-site analytics script ships in this phase.
 
 ## If upload fails with `fork: Resource temporarily unavailable`
 

@@ -37,6 +37,18 @@
                 <li><a href="{{ url('/contact') }}">Contact</a></li>
                 <li><a href="{{ url('/privacy') }}">Privacy</a></li>
                 <li><a href="{{ url('/cookies') }}">Cookies</a></li>
+                @if (config('site.consent_provider') === 'first_party')
+                    <li>
+                        <button
+                            type="button"
+                            class="cursor-pointer bg-transparent p-0 text-left text-accent underline-offset-2 hover:underline"
+                            data-consent-open
+                            onclick="window.dispatchEvent(new Event('site:consent-open'))"
+                        >
+                            Cookie preferences
+                        </button>
+                    </li>
+                @endif
                 <li><a href="{{ url('/terms') }}">Terms</a></li>
                 <li><a href="{{ url('/editorial-policy') }}">Editorial policy</a></li>
             </ul>
