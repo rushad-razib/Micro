@@ -74,6 +74,10 @@ export function toolIsland(config) {
             return this.tool === 'rotate-image';
         },
 
+        get isKnockout() {
+            return this.tool === 'remove-background' || this.engineKey === 'background-remove';
+        },
+
         get isCompress() {
             return this.tool === 'compress-image' || this.engineKey === 'squoosh-compress';
         },
@@ -218,11 +222,20 @@ export function toolIsland(config) {
                 this.downloadUrl = URL.createObjectURL(result.blob);
                 this.previewUrl = this.downloadUrl;
                 this.downloadFilename = downloadName(this.source.basename, this.suffix, result.mime);
+
+                if (this.isKnockout && result.canvas) {
+                    await this.$nextTick();
+                    this.paintKnockout(result.canvas);
+                }
             } catch (err) {
                 if (generation === this.generation) {
                     this.error = err?.message || 'Something went wrong.';
                     this.result = null;
                     this.revokeResultUrls();
+
+                    if (this.isKnockout && ! (this.options.committed || []).length) {
+                        this.options = { ...this.options, preview: null };
+                    }
                 }
             } finally {
                 if (generation === this.generation) {
@@ -375,6 +388,73 @@ export function toolIsland(config) {
 
         setPresetMode(mode) {
             this.updateAndRun({ mode });
+        },
+
+        paintKnockout(sourceCanvas) {
+            const display = this.$refs.knockoutCanvas;
+
+            if (! display) {
+                return;
+            }
+
+            display.width = sourceCanvas.width;
+            display.height = sourceCanvas.height;
+            const ctx = display.getContext('2d');
+
+            if (! ctx) {
+                return;
+            }
+
+            ctx.clearRect(0, 0, display.width, display.height);
+            ctx.drawImage(sourceCanvas, 0, 0);
+        },
+
+        onKnockoutClick(event) {
+            if (! this.isKnockout || ! this.source) {
+                return;
+            }
+
+            const target = event.currentTarget;
+            const bounds = target.getBoundingClientRect();
+            const pixelWidth = target.naturalWidth || target.width;
+            const pixelHeight = target.naturalHeight || target.height;
+
+            if (bounds.width === 0 || bounds.height === 0 || ! pixelWidth || ! pixelHeight) {
+                return;
+            }
+
+            const x = Math.min(
+                pixelWidth - 1,
+                Math.max(0, Math.floor(((event.clientX - bounds.left) / bounds.width) * pixelWidth)),
+            );
+            const y = Math.min(
+                pixelHeight - 1,
+                Math.max(0, Math.floor(((event.clientY - bounds.top) / bounds.height) * pixelHeight)),
+            );
+
+            this.updateAndRun((options) => ({
+                ...options,
+                preview: { x, y, tolerance: options.tolerance ?? 32 },
+            }));
+        },
+
+        commitKnockout() {
+            if (! this.options.preview) {
+                return;
+            }
+
+            this.updateAndRun((options) => ({
+                ...options,
+                committed: [...(options.committed || []), options.preview],
+                preview: null,
+            }));
+        },
+
+        undoKnockout() {
+            this.updateAndRun((options) => ({
+                ...options,
+                committed: (options.committed || []).slice(0, -1),
+            }));
         },
 
         startOver() {

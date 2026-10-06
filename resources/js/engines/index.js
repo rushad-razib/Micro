@@ -1,5 +1,6 @@
 const engines = {
     'canvas-transform': () => import('./canvas-transform.js'),
+    'background-remove': () => import('./background-remove.js'),
     'metadata-strip': () => import('./metadata-strip.js'),
     'squoosh-compress': () => import('./squoosh-compress.js'),
     'pdf-toolkit': () => import('./pdf-toolkit.js'),

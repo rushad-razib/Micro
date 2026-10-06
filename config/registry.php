@@ -15,6 +15,7 @@ return [
 
     'engines' => [
         'canvas-transform',
+        'background-remove',
         'squoosh-compress',
         'metadata-strip',
         'pdf-toolkit',

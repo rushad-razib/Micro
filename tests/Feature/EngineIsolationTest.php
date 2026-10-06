@@ -49,6 +49,10 @@ class EngineIsolationTest extends TestCase
         $this->assertStringContainsString("from 'mammoth'", $office);
         $this->assertStringContainsString("from 'docx'", $office);
         $this->assertStringContainsString('pdfjs-dist', $office);
+
+        $this->assertStringNotContainsString('background-remove.js', $appJs);
+        $this->assertStringNotContainsString('background-remove.js', $islandJs);
+        $this->assertStringContainsString("import('./background-remove.js')", $indexJs);
     }
 
     public function test_compress_page_does_not_embed_pdf_modules(): void

@@ -82,6 +82,7 @@ Validation runs in the registry loader (a test or an artisan command). A bad rec
 | Key | Implementation | Loaded on |
 | --- | --- | --- |
 | `canvas-transform` | Custom module: decode, resize, crop, rotate, flip, `toBlob` convert | Resize, convert, crop, rotate, all four presets |
+| `background-remove` | Canvas flood fill: one connected color per click, committed in memory, PNG export | Remove background only |
 | `squoosh-compress` | Custom UI plus dynamic import of mozjpeg, oxipng, webp | Compress only |
 | `metadata-strip` | `exifr` read, then canvas re-encode at high quality to drop EXIF | Strip metadata only |
 

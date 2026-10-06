@@ -11,7 +11,7 @@ return [
     'promise' => 'Export to JPEG, PNG, or WebP on your device—pick the format that fits.',
     'seo_title' => 'Convert image to JPEG, PNG, or WebP in browser',
     'seo_description' => 'Change image format with local canvas encoding. No upload; AVIF when your browser supports it.',
-    'related' => ['compress-image', 'resize-image'],
+    'related' => ['compress-image', 'resize-image', 'remove-background'],
     'limits' => [
         'max_bytes' => 26214400,
         'max_edge' => 8192,

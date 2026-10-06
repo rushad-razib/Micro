@@ -32,6 +32,7 @@ One shared in-browser pipeline. All of these ship before any AdSense application
 | `crop-image` | Crop, with ratio chips | `crop-image` | `canvas-transform` | Download works with the full frame selected |
 | `rotate-image` | Rotate in 90° steps and flip | `rotate-image` | `canvas-transform` | One control applies immediately |
 | `strip-metadata` | Remove EXIF, including GPS | `strip-image-metadata` | `metadata-strip` | Re-encode through canvas; `exifr` reports what was found |
+| `remove-background` | Make a clicked background area transparent | `remove-background` | `background-remove` | One connected area per click. Save commits that pass in the browser so the next click can clear holes inside letters. PNG only |
 
 Input formats for every phase 1 tool: JPEG, PNG, WebP, and GIF (first frame only, with a visible note). AVIF and BMP are accepted when the browser can decode them. Limits are in [14-mvp-tool-specifications.md](14-mvp-tool-specifications.md).
 
@@ -78,7 +79,7 @@ These stay out until a later review says ads cover the cost, or a policy review 
 
 | Job | Why it is deferred |
 | --- | --- |
-| Background removal | Model weight or a paid API. Both fight the cost model |
+| AI background removal | Model weight or a paid API. The click flood-fill tool is a different job and is listed with the image tools |
 | AI upscale | Same as background removal |
 | Bulk ZIP of many images | Memory pressure on phones; easy to push work onto the server |
 | NSFW, face swap, watermark stripping | AdSense and legal risk |
@@ -123,4 +124,4 @@ A candidate cluster is linked from the homepage only when its hub and at least f
 - Do not mark a service `live` if its guide is a placeholder paragraph.
 - Do not give near-duplicate social sizes their own URLs beyond the four preset pages above without new, specific copy.
 - Do not load HEIC, ZIP, or other phase 2 libraries on phase 1 pages.
-- Do not add a deferred job (background removal, upscale, bulk server work, NSFW) under a different name to skip this catalog.
+- Do not add a deferred job (AI background removal, upscale, bulk server work, NSFW) under a different name to skip this catalog.

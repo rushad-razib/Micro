@@ -65,8 +65,23 @@
                                 <button type="button" aria-label="Resize from bottom right" class="absolute -bottom-2 -right-2 h-5 w-5 rounded-full border-2 border-accent bg-surface" @pointerdown.stop="startCropDrag($event, 'se')"></button>
                             </div>
                         </div>
+                        <div x-show="isKnockout" class="checkerboard relative mx-auto inline-block max-w-full" x-cloak>
+                            <img
+                                x-show="! options.preview && ! (options.committed && options.committed.length)"
+                                :src="sourcePreviewUrl"
+                                alt="Image to edit"
+                                class="block h-auto max-h-80 max-w-full cursor-crosshair"
+                                @click="onKnockoutClick($event)"
+                            >
+                            <canvas
+                                x-show="options.preview || (options.committed && options.committed.length)"
+                                x-ref="knockoutCanvas"
+                                class="block h-auto max-h-80 max-w-full cursor-crosshair"
+                                @click="onKnockoutClick($event)"
+                            ></canvas>
+                        </div>
                         <img
-                            x-show="! isCrop && previewUrl"
+                            x-show="! isCrop && ! isKnockout && previewUrl"
                             :src="previewUrl"
                             alt="Result preview"
                             class="mx-auto max-h-80 w-auto max-w-full object-contain"
@@ -164,6 +179,15 @@
                         <option value="image/webp">WebP</option>
                     </select>
                 </label>
+            </div>
+
+            {{-- Background knockout --}}
+            <div x-show="isKnockout" class="space-y-3" x-cloak>
+                <p class="type-label">Click a background area. Save that pass, then click any missed color, including holes inside letters.</p>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" class="min-h-11 rounded-control border border-line bg-surface px-4 py-2 text-left disabled:opacity-40" :disabled="! options.preview" @click="commitKnockout()">Save and make another area transparent</button>
+                    <button type="button" class="min-h-11 rounded-control border border-line bg-surface px-4 disabled:opacity-40" :disabled="! options.committed?.length" @click="undoKnockout()">Undo</button>
+                </div>
             </div>
 
             {{-- Rotate options --}}
