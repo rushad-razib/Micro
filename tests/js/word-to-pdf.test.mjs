@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { inflateSync } from 'node:zlib';
 import {
+    AlignmentType,
     Document,
+    ImageRun,
     Packer,
     Paragraph,
     Tab,
@@ -157,6 +159,37 @@ test('a paragraph Word placed on the next page stays off the cover', async () =>
     assert.ok(body && body.y > 700, `body y was ${body?.y}`);
 });
 
+test('a first-page border stays off the following section', async () => {
+    const bytes = await firstPageBorderDocx();
+    const result = await process({
+        files: [asFile(bytes, 'first-page-border.docx')],
+        tool: 'word-to-pdf',
+        limits: { max_bytes: 5_000_000, max_pages: 20 },
+    });
+    const streams = contentStreams(new Uint8Array(await result.blob.arrayBuffer()));
+    const cover = streams.find((stream) => streamText(stream).includes('CoverLine'));
+    const body = streams.find((stream) => streamText(stream).includes('BodyStarts'));
+    const bodyLine = textLines(body || '').flat().find((item) => item.text === 'BodyStarts');
+
+    assert.equal(result.meta.pageCount, 2);
+    assert.match(cover || '', /3 w/);
+    assert.doesNotMatch(body || '', /3 w/);
+    assert.ok(bodyLine && bodyLine.y > 700, `body y was ${bodyLine?.y}`);
+});
+
+test('a centered picture sits in the middle of the line', async () => {
+    const bytes = await centeredImageDocx();
+    const result = await process({
+        files: [asFile(bytes, 'centered-image.docx')],
+        tool: 'word-to-pdf',
+        limits: { max_bytes: 5_000_000, max_pages: 20 },
+    });
+    const source = inflatePdf(new Uint8Array(await result.blob.arrayBuffer()));
+    const image = imagePositions(source)[0];
+
+    assert.ok(image && image.x > 200, `image x was ${image?.x}`);
+});
+
 test('one-inch page margins keep a full cover from pulling the next paragraph', async () => {
     const bytes = await marginCoverDocx();
     const result = await process({
@@ -239,6 +272,58 @@ function inflatePdf(bytes) {
 /**
  * @param {Buffer} payload
  */
+function contentStreams(bytes) {
+    const source = Buffer.from(bytes).toString('latin1');
+    const streams = [];
+    const pattern = /stream\r?\n/g;
+    let match = pattern.exec(source);
+
+    while (match) {
+        const start = match.index + match[0].length;
+        const end = source.indexOf('endstream', start);
+
+        if (end < 0) {
+            break;
+        }
+
+        const inflated = inflateStream(Buffer.from(source.slice(start, end), 'latin1'));
+
+        if (inflated) {
+            streams.push(inflated);
+        }
+
+        match = pattern.exec(source);
+    }
+
+    return streams;
+}
+
+/**
+ * @param {string} stream
+ */
+function streamText(stream) {
+    return textLines(stream).flat().map((item) => item.text).join('');
+}
+
+/**
+ * @param {string} source
+ */
+function imagePositions(source) {
+    const positions = [];
+    const pattern = /q\s+([\d.]+) 0 0 ([\d.]+) ([\d.]+) ([\d.]+) cm[\s\S]{0,80}?Do/g;
+
+    for (const match of source.matchAll(pattern)) {
+        positions.push({
+            width: Number(match[1]),
+            height: Number(match[2]),
+            x: Number(match[3]),
+            y: Number(match[4]),
+        });
+    }
+
+    return positions;
+}
+
 function inflateStream(payload) {
     const candidates = [
         payload,
@@ -374,6 +459,73 @@ async function marginCoverDocx() {
 </w:styles>`);
 
     return zip.generateAsync({ type: 'uint8array' });
+}
+
+async function firstPageBorderDocx() {
+    const zip = new JSZip();
+
+    zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr>
+        <w:sectPr>
+          <w:pgBorders w:display="firstPage" w:offsetFrom="page">
+            <w:top w:val="single" w:sz="24" w:space="24" w:color="000000"/>
+            <w:left w:val="single" w:sz="24" w:space="24" w:color="000000"/>
+            <w:bottom w:val="single" w:sz="24" w:space="24" w:color="000000"/>
+            <w:right w:val="single" w:sz="24" w:space="24" w:color="000000"/>
+          </w:pgBorders>
+          <w:pgMar w:top="1440" w:bottom="1440" w:left="1440" w:right="1440"/>
+          <w:type w:val="nextPage"/>
+        </w:sectPr>
+      </w:pPr>
+      <w:r><w:t>CoverLine</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:t>BodyStarts</w:t></w:r>
+    </w:p>
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1440" w:bottom="1440" w:left="1440" w:right="1440"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`);
+
+    zip.file('word/styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
+    <w:name w:val="Normal"/>
+  </w:style>
+</w:styles>`);
+
+    return zip.generateAsync({ type: 'uint8array' });
+}
+
+async function centeredImageDocx() {
+    const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mP8z8BQz0AEYBxVSF+FABJADveWkH6oAAAAAElFTkSuQmCC',
+        'base64',
+    );
+    const doc = new Document({
+        sections: [{
+            children: [
+                new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    children: [
+                        new ImageRun({
+                            type: 'png',
+                            data: png,
+                            transformation: { width: 40, height: 40 },
+                        }),
+                    ],
+                }),
+            ],
+        }],
+    });
+    const buffer = await Packer.toBuffer(doc);
+
+    return new Uint8Array(buffer);
 }
 
 async function coverDocx() {

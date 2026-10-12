@@ -145,7 +145,9 @@ class PdfLayout {
         this.section = null;
         this.pageMargins = null;
         this.pageNumber = null;
-        this.pageHasBorder = false;
+        this.pageBorderPainted = false;
+        this.pageContent = false;
+        this.pageOwner = null;
         this.box = null;
         this.frame = { left: MARGIN, right: MARGIN, top: MARGIN, bottom: MARGIN };
         this.addPage();
@@ -156,16 +158,19 @@ class PdfLayout {
             throw new Error(`This document is too long for conversion (max about ${this.maxPages} pages).`);
         }
 
+        this.finishPageBorder();
         this.flushBox();
         this.page = this.pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-        this.pageHasBorder = false;
+        this.pageBorderPainted = false;
+        this.pageContent = false;
+        this.pageOwner = null;
         this.applyFrame(true);
-        this.paintBorder();
     }
 
     /**
-     * Keep later paragraphs inside the page border. A line that would sit
-     * under the frame starts the next page instead.
+     * Keep later paragraphs inside the page margins. A line that would sit
+     * under the frame starts the next page instead. A page border is drawn
+     * around the finished page and does not move this frame.
      *
      * @param {boolean} resetCursor
      */
@@ -176,17 +181,8 @@ class PdfLayout {
             top: MARGIN,
             bottom: MARGIN,
         };
-        const insets = this.section?.border ? this.borderInsets(this.section.border) : null;
-        const pad = 8;
 
-        this.frame = insets
-            ? {
-                left: Math.max(insets.left + pad, 8),
-                right: Math.max(insets.right + pad, 8),
-                top: Math.max(insets.top + pad, 8),
-                bottom: Math.max(insets.bottom + pad, 8),
-            }
-            : { ...margins };
+        this.frame = { ...margins };
         this.x = this.frame.left;
         this.width = Math.max(PAGE_WIDTH - this.frame.left - this.frame.right, 8);
 
@@ -254,14 +250,48 @@ class PdfLayout {
         };
     }
 
-    paintBorder() {
-        const border = this.section?.border;
+    /**
+     * An empty page belongs to whichever section starts writing on it.
+     * A page that already has body text keeps the section that started it.
+     */
+    claimPage() {
+        if (! this.pageContent) {
+            this.pageOwner = this.section;
+        }
+    }
 
-        if (! border || this.pageHasBorder || ! this.page) {
+    markPageContent() {
+        if (! this.pageOwner) {
+            this.pageOwner = this.section;
+        }
+
+        this.pageContent = true;
+    }
+
+    /**
+     * Paint the decorative page border once the page's owner is known.
+     * firstPage and notFirstPage follow w:display. allPages is the default.
+     */
+    finishPageBorder() {
+        if (! this.page || this.pageBorderPainted) {
             return;
         }
 
-        this.pageHasBorder = true;
+        this.pageBorderPainted = true;
+        const section = this.pageOwner;
+        const border = section?.border;
+
+        if (! section || ! border) {
+            return;
+        }
+
+        const index = section.pageCount || 0;
+        section.pageCount = index + 1;
+
+        if (! borderVisible(border, index)) {
+            return;
+        }
+
         const insets = this.borderInsets(border);
 
         this.page.drawRectangle({
@@ -450,6 +480,7 @@ class PdfLayout {
 
             await this.drawBlocks(nodes, true);
             this.flushBox();
+            this.finishPageBorder();
 
             return;
         }
@@ -464,6 +495,7 @@ class PdfLayout {
         }
 
         this.flushBox();
+        this.finishPageBorder();
     }
 
     /**
@@ -473,8 +505,8 @@ class PdfLayout {
      */
     async drawSection(nodes, section, hasMore) {
         this.section = section;
+        this.claimPage();
         this.applyFrame();
-        this.paintBorder();
         const extra = await this.sectionShift(nodes, section);
 
         for (let index = 0; index < nodes.length; index += 1) {
@@ -576,6 +608,8 @@ class PdfLayout {
     async drawParagraph(paragraph) {
         const top = PAGE_HEIGHT - this.frame.top;
 
+        this.markPageContent();
+
         if (paragraph._pageBreakBefore && this.canBreak && this.y < top - 0.5) {
             this.addPage();
         }
@@ -604,7 +638,7 @@ class PdfLayout {
             }
 
             if (piece.type === 'image') {
-                await this.drawImage(piece.image);
+                await this.drawImage(piece.image, piece.align);
                 continue;
             }
 
@@ -617,6 +651,7 @@ class PdfLayout {
 
             if (! lines.length) {
                 this.ensureSpace(11);
+                this.markPageContent();
                 this.y -= 11;
                 continue;
             }
@@ -626,6 +661,7 @@ class PdfLayout {
                 const size = lineSize(line);
                 const lineHeight = size * LINE_FACTOR;
                 this.ensureSpace(lineHeight);
+                this.markPageContent();
                 const baseline = this.y - size;
 
                 if (piece.align === 'distribute' || (piece.align === 'justify' && lineIndex < lines.length - 1)) {
@@ -679,7 +715,11 @@ class PdfLayout {
     /**
      * @param {object} image
      */
-    async drawImage(image) {
+    /**
+     * @param {object} image
+     * @param {string} [align]
+     */
+    async drawImage(image, align = 'left') {
         const box = await this.imageBox(image, this.width);
 
         if (! box) {
@@ -687,9 +727,18 @@ class PdfLayout {
         }
 
         this.ensureSpace(box.height);
+        this.markPageContent();
         this.y -= box.height;
+        let x = this.x;
+
+        if (align === 'center') {
+            x += Math.max(this.width - box.width, 0) / 2;
+        } else if (align === 'right') {
+            x += Math.max(this.width - box.width, 0);
+        }
+
         this.page.drawImage(box.embedded, {
-            x: this.x,
+            x,
             y: this.y,
             width: box.width,
             height: box.height,
@@ -701,6 +750,7 @@ class PdfLayout {
      * @param {object} table
      */
     async drawTable(table) {
+        this.markPageContent();
         this.flushBox();
         const rows = (table.children || []).filter((row) => row?.type === 'tableRow');
         const widths = fitWidths(table._grid || [], columnCount(rows), this.width);
@@ -709,6 +759,7 @@ class PdfLayout {
         for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
             const rowHeight = measured.rowHeights[rowIndex];
             this.ensureSpace(rowHeight);
+            this.markPageContent();
             const rowTop = this.y;
 
             for (const cell of measured.cells) {
@@ -1147,7 +1198,7 @@ function buildPieces(paragraph, styles, counters) {
                 } else if (part?.type === 'image') {
                     flush();
                     pushText();
-                    pieces.push({ type: 'image', image: part });
+                    pieces.push({ type: 'image', image: part, align: alignment(paragraph.alignment) });
                 } else if (part?.type === 'break') {
                     flush();
                     pushText();
@@ -2038,6 +2089,22 @@ function readVAlign(sectPr) {
 }
 
 /**
+ * @param {{ display?: string }} border
+ * @param {number} index
+ */
+function borderVisible(border, index) {
+    if (border.display === 'firstPage') {
+        return index === 0;
+    }
+
+    if (border.display === 'notFirstPage') {
+        return index > 0;
+    }
+
+    return true;
+}
+
+/**
  * @param {object|null} sectPr
  */
 function readPageBorder(sectPr) {
@@ -2060,8 +2127,11 @@ function readPageBorder(sectPr) {
 
     const sample = sides.top || sides.left || sides.bottom || sides.right;
 
+    const display = attr(borders, 'display');
+
     return {
         offsetFrom: attr(borders, 'offsetFrom') === 'text' ? 'text' : 'page',
+        display: display === 'firstPage' || display === 'notFirstPage' ? display : 'allPages',
         width: sample.width,
         color: sample.color,
         space: {
