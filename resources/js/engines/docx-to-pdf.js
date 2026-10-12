@@ -93,7 +93,8 @@ export async function layoutDocument(document, arrayBuffer, limits = {}) {
     const zip = await JSZip.loadAsync(arrayBuffer);
     const theme = parseTheme(await readZipText(zip, findThemePath(zip)));
     const styles = parseStyles(await readZipText(zip, 'word/styles.xml'), theme);
-    const xml = readDocumentXml(await readZipText(zip, 'word/document.xml'), theme);
+    const documentXml = await readZipText(zip, 'word/document.xml');
+    const xml = readDocumentXml(documentXml, theme);
     const defaultTab = readDefaultTab(await readZipText(zip, 'word/settings.xml'));
     const prepared = prepareDocument(document, xml, styles);
 
@@ -103,10 +104,14 @@ export async function layoutDocument(document, arrayBuffer, limits = {}) {
 
     const pdf = await PDFDocument.create();
     const layout = new PdfLayout(pdf, limits?.max_pages ?? 100, defaultTab);
+    layout.pageMargins = xml.pageMargins;
+    layout.pageNumber = await readPageNumber(zip, documentXml);
+    layout.sections = prepared.sections;
     layout.preparePieces(document, styles);
     await layout.bindFonts(document);
 
-    await layout.drawBlocks(document.children || [], true);
+    await layout.drawDocument(document.children || []);
+    await layout.paintPageNumbers();
 
     const bytes = await pdf.save();
 
@@ -136,6 +141,13 @@ class PdfLayout {
         this.width = PAGE_WIDTH - (MARGIN * 2);
         this.canBreak = true;
         this.images = new Map();
+        this.sections = null;
+        this.section = null;
+        this.pageMargins = null;
+        this.pageNumber = null;
+        this.pageHasBorder = false;
+        this.box = null;
+        this.frame = { left: MARGIN, right: MARGIN, top: MARGIN, bottom: MARGIN };
         this.addPage();
     }
 
@@ -144,19 +156,197 @@ class PdfLayout {
             throw new Error(`This document is too long for conversion (max about ${this.maxPages} pages).`);
         }
 
+        this.flushBox();
         this.page = this.pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-        this.x = MARGIN;
-        this.y = PAGE_HEIGHT - MARGIN;
-        this.width = PAGE_WIDTH - (MARGIN * 2);
+        this.pageHasBorder = false;
+        this.applyFrame(true);
+        this.paintBorder();
+    }
+
+    /**
+     * Keep later paragraphs inside the page border. A line that would sit
+     * under the frame starts the next page instead.
+     *
+     * @param {boolean} resetCursor
+     */
+    applyFrame(resetCursor = false) {
+        const margins = this.section?.margins || this.pageMargins || {
+            left: MARGIN,
+            right: MARGIN,
+            top: MARGIN,
+            bottom: MARGIN,
+        };
+        const insets = this.section?.border ? this.borderInsets(this.section.border) : null;
+        const pad = 8;
+
+        this.frame = insets
+            ? {
+                left: Math.max(insets.left + pad, 8),
+                right: Math.max(insets.right + pad, 8),
+                top: Math.max(insets.top + pad, 8),
+                bottom: Math.max(insets.bottom + pad, 8),
+            }
+            : { ...margins };
+        this.x = this.frame.left;
+        this.width = Math.max(PAGE_WIDTH - this.frame.left - this.frame.right, 8);
+
+        const top = PAGE_HEIGHT - this.frame.top;
+        const untouched = Math.abs(this.y - (PAGE_HEIGHT - MARGIN)) < 0.5;
+
+        if (resetCursor || untouched || this.y > top) {
+            this.y = top;
+        }
+    }
+
+    /**
+     * Draw a footer PAGE field. The number sits in the margin under the body.
+     */
+    async paintPageNumbers() {
+        const spec = this.pageNumber;
+
+        if (! spec) {
+            return;
+        }
+
+        const font = await this.pdf.embedFont(StandardFonts.TimesRoman);
+        const pages = this.pdf.getPages();
+
+        pages.forEach((page, index) => {
+            const text = String(spec.start + index);
+            const width = font.widthOfTextAtSize(text, spec.size);
+            let x = spec.margins.left;
+
+            if (spec.align === 'center' || spec.align === 'both') {
+                x = (PAGE_WIDTH - width) / 2;
+            } else if (spec.align === 'right' || spec.align === 'end') {
+                x = PAGE_WIDTH - spec.margins.right - width;
+            }
+
+            page.drawText(text, {
+                x,
+                y: spec.offset,
+                size: spec.size,
+                font,
+                color: TEXT_COLOR,
+            });
+        });
+    }
+
+    /**
+     * @param {object} border
+     */
+    borderInsets(border) {
+        const inset = (side) => {
+            const space = border.space[side] ?? 24;
+
+            if (border.offsetFrom === 'text') {
+                return Math.max(8, MARGIN - space);
+            }
+
+            return Math.max(8, Math.min(space, 140));
+        };
+
+        return {
+            left: inset('left'),
+            right: inset('right'),
+            top: inset('top'),
+            bottom: inset('bottom'),
+        };
+    }
+
+    paintBorder() {
+        const border = this.section?.border;
+
+        if (! border || this.pageHasBorder || ! this.page) {
+            return;
+        }
+
+        this.pageHasBorder = true;
+        const insets = this.borderInsets(border);
+
+        this.page.drawRectangle({
+            x: insets.left,
+            y: insets.bottom,
+            width: Math.max(PAGE_WIDTH - insets.left - insets.right, 8),
+            height: Math.max(PAGE_HEIGHT - insets.top - insets.bottom, 8),
+            borderColor: border.color,
+            borderWidth: border.width,
+        });
+    }
+
+    flushBox() {
+        const box = this.box;
+        this.box = null;
+
+        if (! box) {
+            return;
+        }
+
+        const height = box.top - box.bottom;
+
+        if (height < 8 || box.width < 8) {
+            return;
+        }
+
+        box.page.drawRectangle({
+            x: box.x,
+            y: box.bottom,
+            width: box.width,
+            height,
+            borderColor: box.color,
+            borderWidth: box.stroke,
+        });
+    }
+
+    /**
+     * @param {object} paragraph
+     */
+    noteBox(paragraph) {
+        const edges = paragraph._edges;
+
+        if (! edges?.left && ! edges?.right) {
+            this.flushBox();
+
+            return;
+        }
+
+        if (this.section?.border) {
+            return;
+        }
+
+        const stroke = edges.left?.width || edges.right?.width || 1;
+        const key = `${stroke}:${edges.left?.space ?? ''}:${edges.right?.space ?? ''}`;
+
+        if (! this.box || this.box.key !== key || this.box.page !== this.page) {
+            this.flushBox();
+            const leftSpace = edges.left?.space ?? 6;
+            const rightSpace = edges.right?.space ?? 6;
+            this.box = {
+                key,
+                page: this.page,
+                x: Math.max(8, this.x - leftSpace),
+                width: this.width + leftSpace + rightSpace,
+                top: this.y + (edges.top?.space ?? 4),
+                bottom: this.y,
+                stroke,
+                color: edges.left?.color || edges.right?.color || TEXT_COLOR,
+            };
+        }
+    }
+
+    extendBox() {
+        if (this.box?.page === this.page) {
+            this.box.bottom = this.y;
+        }
     }
 
     /**
      * @param {number} height
      */
     ensureSpace(height) {
-        const top = PAGE_HEIGHT - MARGIN;
+        const top = PAGE_HEIGHT - this.frame.top;
 
-        if (this.canBreak && this.y - height < MARGIN && this.y < top - 0.5) {
+        if (this.canBreak && this.y - height < this.frame.bottom && this.y < top - 0.5) {
             this.addPage();
         }
     }
@@ -249,6 +439,120 @@ class PdfLayout {
 
     /**
      * @param {object[]} nodes
+     */
+    async drawDocument(nodes) {
+        const sections = this.sections;
+
+        if (! sections?.length) {
+            if (this.pageMargins) {
+                this.applyFrame(true);
+            }
+
+            await this.drawBlocks(nodes, true);
+            this.flushBox();
+
+            return;
+        }
+
+        let index = 0;
+
+        for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex += 1) {
+            const section = sections[sectionIndex];
+            const slice = nodes.slice(index, index + section.blocks);
+            index += section.blocks;
+            await this.drawSection(slice, section, sectionIndex < sections.length - 1);
+        }
+
+        this.flushBox();
+    }
+
+    /**
+     * @param {object[]} nodes
+     * @param {{ blocks: number, breakAfter: boolean, vAlign: string|null, border: object|null }} section
+     * @param {boolean} hasMore
+     */
+    async drawSection(nodes, section, hasMore) {
+        this.section = section;
+        this.applyFrame();
+        this.paintBorder();
+        const extra = await this.sectionShift(nodes, section);
+
+        for (let index = 0; index < nodes.length; index += 1) {
+            await this.drawNode(nodes[index]);
+
+            if (extra && index < nodes.length - 1) {
+                this.y -= extra;
+            }
+        }
+
+        const top = PAGE_HEIGHT - this.frame.top;
+
+        if (section.breakAfter && hasMore && this.canBreak && this.y < top - 0.5) {
+            this.flushBox();
+            this.section = null;
+            this.addPage();
+        }
+    }
+
+    /**
+     * @param {object[]} nodes
+     * @param {{ vAlign: string|null }} section
+     */
+    async sectionShift(nodes, section) {
+        if (! section.vAlign || ! nodes.length) {
+            return 0;
+        }
+
+        let height = 0;
+
+        for (const node of nodes) {
+            height += await this.measureBlocks([node], this.width);
+        }
+
+        const available = this.y - this.frame.bottom;
+
+        if (height <= 0 || height >= available) {
+            return 0;
+        }
+
+        const spare = available - height;
+
+        if (section.vAlign === 'center') {
+            this.y -= spare / 2;
+
+            return 0;
+        }
+
+        if (section.vAlign === 'bottom') {
+            this.y -= spare;
+
+            return 0;
+        }
+
+        if (section.vAlign === 'both' && nodes.length > 1) {
+            return spare / (nodes.length - 1);
+        }
+
+        if (section.vAlign === 'both') {
+            this.y -= spare / 2;
+        }
+
+        return 0;
+    }
+
+    /**
+     * @param {object} node
+     */
+    async drawNode(node) {
+        if (node?.type === 'paragraph') {
+            await this.drawParagraph(node);
+        } else if (node?.type === 'table') {
+            await this.drawTable(node);
+        }
+    }
+
+    /**
+     * @param {object[]} nodes
      * @param {boolean} canBreak
      */
     async drawBlocks(nodes, canBreak) {
@@ -270,6 +574,24 @@ class PdfLayout {
      * @param {object} paragraph
      */
     async drawParagraph(paragraph) {
+        const top = PAGE_HEIGHT - this.frame.top;
+
+        if (paragraph._pageBreakBefore && this.canBreak && this.y < top - 0.5) {
+            this.addPage();
+        }
+
+        const before = paragraph._spacingBefore || 0;
+
+        if (before > this.y - this.frame.bottom && this.canBreak && this.y < top - 0.5) {
+            this.addPage();
+        }
+
+        if (before > 0) {
+            const room = Math.max(this.y - this.frame.bottom, 0);
+            this.y -= Math.min(before, room);
+        }
+
+        this.noteBox(paragraph);
         const pieces = paragraph._pieces || [];
 
         for (const piece of pieces) {
@@ -346,8 +668,11 @@ class PdfLayout {
             }
         }
 
-        if (pieces.length) {
-            this.y -= PARAGRAPH_GAP;
+        this.y -= paragraphAfter(paragraph);
+        this.extendBox();
+
+        if (paragraph._breakAfter && this.canBreak && this.y < PAGE_HEIGHT - this.frame.top - 0.5) {
+            this.addPage();
         }
     }
 
@@ -376,6 +701,7 @@ class PdfLayout {
      * @param {object} table
      */
     async drawTable(table) {
+        this.flushBox();
         const rows = (table.children || []).filter((row) => row?.type === 'tableRow');
         const widths = fitWidths(table._grid || [], columnCount(rows), this.width);
         const measured = await this.measureRows(rows, widths);
@@ -549,8 +875,10 @@ class PdfLayout {
             }
         }
 
-        if (pieces.length) {
-            height += PARAGRAPH_GAP;
+        height += paragraphAfter(paragraph);
+
+        if (paragraph._spacingBefore) {
+            height += paragraph._spacingBefore;
         }
 
         return height;
@@ -654,6 +982,12 @@ function prepareDocument(document, xml, styles) {
                 node._style = resolveParagraphStyle(styles, node.styleId);
                 node._xmlRuns = xmlRuns && xmlRuns.length === runCount ? xmlRuns : null;
                 node._tabs = xmlParagraph?.tabs ?? styleTabs(styles, node.styleId);
+                const layout = resolveParagraphLayout(styles, node.styleId, xmlParagraph);
+                node._spacingBefore = layout.spacingBefore;
+                node._spacingAfter = layout.spacingAfter;
+                node._pageBreakBefore = layout.pageBreakBefore || !! xmlParagraph?.renderedBreak;
+                node._breakAfter = !! xmlParagraph?.breakAfter;
+                node._edges = layout.edges;
 
                 if (paragraphHasText(node) || paragraphHasImage(node)) {
                     hasContent = true;
@@ -684,7 +1018,21 @@ function prepareDocument(document, xml, styles) {
 
     visit(document.children || []);
 
-    return { hasContent };
+    return {
+        hasContent,
+        sections: matchSections(document, xml.sections),
+    };
+}
+
+/**
+ * @param {object} paragraph
+ */
+function paragraphAfter(paragraph) {
+    if (paragraph._spacingAfter === null || paragraph._spacingAfter === undefined) {
+        return PARAGRAPH_GAP;
+    }
+
+    return paragraph._spacingAfter;
 }
 
 /**
@@ -1494,6 +1842,441 @@ function positive(value) {
 }
 
 /**
+ * @param {object} document
+ * @param {object[]|undefined} sections
+ */
+function matchSections(document, sections) {
+    if (! sections?.length) {
+        return null;
+    }
+
+    const nodes = document.children || [];
+    const blocks = nodes.filter((node) => node?.type === 'paragraph' || node?.type === 'table');
+
+    if (blocks.length !== nodes.length) {
+        return null;
+    }
+
+    const total = sections.reduce((sum, section) => sum + section.blocks, 0);
+
+    return total === blocks.length ? sections : null;
+}
+
+/**
+ * @param {object|null|undefined} sectPr
+ */
+function readMargins(sectPr) {
+    const mar = firstChild(sectPr, 'pgMar');
+
+    if (! mar) {
+        return null;
+    }
+
+    const points = (name) => {
+        const twips = Number(attr(mar, name));
+
+        return Number.isFinite(twips) && twips >= 0 ? twips / 20 : null;
+    };
+    const top = points('top');
+    const bottom = points('bottom');
+    const left = points('left');
+    const right = points('right');
+
+    if (top === null && bottom === null && left === null && right === null) {
+        return null;
+    }
+
+    return {
+        top: top ?? MARGIN,
+        bottom: bottom ?? MARGIN,
+        left: left ?? MARGIN,
+        right: right ?? MARGIN,
+    };
+}
+
+/**
+ * A footer that is only a PAGE field. The number is drawn in the bottom margin.
+ *
+ * @param {JSZip} zip
+ * @param {string|null} documentXml
+ */
+async function readPageNumber(zip, documentXml) {
+    if (! zip || ! documentXml) {
+        return null;
+    }
+
+    const doc = parseXml(documentXml);
+    const sects = descendants(doc, 'sectPr');
+    const sect = sects[sects.length - 1];
+    const footer = elementChildren(sect).find((child) => {
+        return localName(child) === 'footerReference' && (attr(child, 'type') || 'default') === 'default';
+    }) || firstChild(sect, 'footerReference');
+    const id = attr(footer, 'id');
+
+    if (! id) {
+        return null;
+    }
+
+    const rels = await readZipText(zip, 'word/_rels/document.xml.rels');
+    const rel = descendants(parseXml(rels || ''), 'Relationship').find((node) => attr(node, 'Id') === id);
+    const target = String(attr(rel, 'Target') || '').replace(/^\/+/, '');
+
+    if (! /footer/i.test(target)) {
+        return null;
+    }
+
+    const footerXml = await readZipText(zip, target.startsWith('word/') ? target : `word/${target.replace(/^\.\.\//, '')}`);
+
+    if (! footerXml || ! /\bPAGE\b/.test(footerXml)) {
+        return null;
+    }
+
+    const footerDoc = parseXml(footerXml);
+    const paragraph = firstDescendant(footerDoc, 'p');
+    const properties = firstChild(paragraph, 'pPr');
+    const align = attr(firstChild(properties, 'jc'), 'val') || 'center';
+    const size = positive(Number(attr(firstDescendant(footerDoc, 'sz'), 'val')) / 2) || 12;
+    const footerTwips = Number(attr(firstChild(sect, 'pgMar'), 'footer'));
+    const start = Number(attr(firstChild(sect, 'pgNumType'), 'start'));
+    const margins = readMargins(sect) || { left: MARGIN, right: MARGIN, top: MARGIN, bottom: MARGIN };
+
+    return {
+        align,
+        size,
+        offset: Number.isFinite(footerTwips) && footerTwips > 0 ? footerTwips / 20 : 36,
+        start: Number.isFinite(start) && start > 0 ? start : 1,
+        margins,
+    };
+}
+
+/**
+ * @param {object|null|undefined} body
+ */
+function readSections(body) {
+    if (! body) {
+        return { sections: [], pageMargins: null };
+    }
+
+    const sections = [];
+    let blocks = 0;
+    let pageMargins = null;
+
+    const close = (sectPr, isFinal) => {
+        const margins = readMargins(sectPr);
+
+        if (margins) {
+            pageMargins = margins;
+        }
+
+        if (blocks <= 0) {
+            return;
+        }
+
+        sections.push({
+            blocks,
+            breakAfter: sectionBreaksPage(sectPr, isFinal),
+            vAlign: readVAlign(sectPr),
+            border: readPageBorder(sectPr),
+            margins,
+        });
+        blocks = 0;
+    };
+
+    const visit = (el) => {
+        for (const child of elementChildren(el)) {
+            const name = localName(child);
+
+            if (name === 'sectPr') {
+                close(child, true);
+            } else if (name === 'p') {
+                blocks += 1;
+                const sectPr = firstChild(firstChild(child, 'pPr'), 'sectPr');
+
+                if (sectPr) {
+                    close(sectPr, false);
+                }
+            } else if (name === 'tbl') {
+                blocks += 1;
+            } else if (BLOCK_CONTAINERS.has(name) && name !== 'tr' && name !== 'tc') {
+                visit(child);
+            }
+        }
+    };
+
+    visit(body);
+
+    return { sections, pageMargins };
+}
+
+/**
+ * A paragraph sectPr ends the section. The body's final sectPr only describes it.
+ *
+ * @param {object|null} sectPr
+ * @param {boolean} isFinal
+ */
+function sectionBreaksPage(sectPr, isFinal) {
+    if (isFinal || ! sectPr) {
+        return false;
+    }
+
+    const value = attr(firstChild(sectPr, 'type'), 'val');
+
+    return value !== 'continuous' && value !== 'nextColumn';
+}
+
+/**
+ * @param {object|null} sectPr
+ */
+function readVAlign(sectPr) {
+    const value = attr(firstChild(sectPr, 'vAlign'), 'val');
+
+    if (value === 'center' || value === 'both' || value === 'bottom') {
+        return value;
+    }
+
+    return null;
+}
+
+/**
+ * @param {object|null} sectPr
+ */
+function readPageBorder(sectPr) {
+    const borders = firstChild(sectPr, 'pgBorders');
+
+    if (! borders) {
+        return null;
+    }
+
+    const sides = {
+        top: readBorderSide(firstChild(borders, 'top')),
+        left: readBorderSide(firstChild(borders, 'left')),
+        bottom: readBorderSide(firstChild(borders, 'bottom')),
+        right: readBorderSide(firstChild(borders, 'right')),
+    };
+
+    if (! sides.top && ! sides.left && ! sides.bottom && ! sides.right) {
+        return null;
+    }
+
+    const sample = sides.top || sides.left || sides.bottom || sides.right;
+
+    return {
+        offsetFrom: attr(borders, 'offsetFrom') === 'text' ? 'text' : 'page',
+        width: sample.width,
+        color: sample.color,
+        space: {
+            top: sides.top?.space ?? sample.space,
+            left: sides.left?.space ?? sample.space,
+            bottom: sides.bottom?.space ?? sample.space,
+            right: sides.right?.space ?? sample.space,
+        },
+    };
+}
+
+/**
+ * @param {object|null} el
+ */
+function readBorderSide(el) {
+    if (! el) {
+        return null;
+    }
+
+    const value = (attr(el, 'val') || 'single').toLowerCase();
+
+    if (value === 'nil' || value === 'none' || value === 'false') {
+        return null;
+    }
+
+    const size = Number(attr(el, 'sz'));
+    const space = Number(attr(el, 'space'));
+
+    return {
+        width: Number.isFinite(size) && size > 0 ? Math.max(size / 8, 0.75) : 1,
+        space: Number.isFinite(space) && space >= 0 ? space : 24,
+        color: rgbFromHex(attr(el, 'color')),
+    };
+}
+
+/**
+ * @param {string|null|undefined} hex
+ */
+function rgbFromHex(hex) {
+    const value = String(hex || '').replace('#', '');
+
+    if (! /^[0-9A-Fa-f]{6}$/.test(value)) {
+        return rgb(0, 0, 0);
+    }
+
+    return rgb(
+        parseInt(value.slice(0, 2), 16) / 255,
+        parseInt(value.slice(2, 4), 16) / 255,
+        parseInt(value.slice(4, 6), 16) / 255,
+    );
+}
+
+/**
+ * Word stores the last pagination in the first paragraph of each new page.
+ *
+ * @param {object} paragraph
+ */
+function paragraphHasRenderedBreak(paragraph) {
+    let seenText = false;
+
+    const visit = (el) => {
+        for (const child of elementChildren(el)) {
+            const name = localName(child);
+
+            if (name === 'lastRenderedPageBreak' && ! seenText) {
+                return true;
+            }
+
+            if (name === 't' && textOf(child).trim()) {
+                seenText = true;
+            }
+
+            if ((name === 'r' || RUN_CONTAINERS.has(name)) && visit(child)) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    return visit(paragraph);
+}
+
+/**
+ * @param {object|null} pPr
+ */
+function readParagraphLayout(pPr) {
+    const spacing = firstChild(pPr, 'spacing');
+
+    return {
+        spacingBefore: twipsToPoints(attr(spacing, 'before')),
+        spacingAfter: twipsToPoints(attr(spacing, 'after')),
+        pageBreakBefore: readOnOff(firstChild(pPr, 'pageBreakBefore')),
+        edges: readParagraphEdges(pPr),
+    };
+}
+
+/**
+ * @param {object|null} pPr
+ */
+function readParagraphEdges(pPr) {
+    const borders = firstChild(pPr, 'pBdr');
+
+    if (! borders) {
+        return null;
+    }
+
+    return {
+        top: readBorderSide(firstChild(borders, 'top')),
+        left: readBorderSide(firstChild(borders, 'left')),
+        bottom: readBorderSide(firstChild(borders, 'bottom')),
+        right: readBorderSide(firstChild(borders, 'right')),
+    };
+}
+
+/**
+ * @param {object|null|undefined} el
+ */
+function readOnOff(el) {
+    if (! el) {
+        return null;
+    }
+
+    const value = attr(el, 'val');
+
+    if (value === null || value === '') {
+        return true;
+    }
+
+    return value !== '0' && value !== 'false' && value !== 'off';
+}
+
+/**
+ * @param {string|null|undefined} value
+ */
+function twipsToPoints(value) {
+    if (value === null || value === undefined || value === '') {
+        return null;
+    }
+
+    const number = Number(value);
+
+    if (! Number.isFinite(number) || number < 0) {
+        return null;
+    }
+
+    return Math.min(number / 20, PAGE_HEIGHT - (MARGIN * 2) - 24);
+}
+
+/**
+ * @param {object} styles
+ * @param {string|null|undefined} styleId
+ * @param {object|null|undefined} xmlParagraph
+ */
+function resolveParagraphLayout(styles, styleId, xmlParagraph) {
+    const chain = [];
+    const seen = new Set();
+    let id = styleId || styles.defaultParagraphId;
+
+    while (id && ! seen.has(id) && styles.byId.has(id)) {
+        seen.add(id);
+        chain.push(styles.byId.get(id));
+        id = styles.byId.get(id).basedOn;
+    }
+
+    let spacingBefore = null;
+    let spacingAfter = null;
+    let pageBreakBefore = null;
+    let edges = null;
+
+    for (const style of chain.reverse()) {
+        if (style.spacingBefore !== null && style.spacingBefore !== undefined) {
+            spacingBefore = style.spacingBefore;
+        }
+
+        if (style.spacingAfter !== null && style.spacingAfter !== undefined) {
+            spacingAfter = style.spacingAfter;
+        }
+
+        if (style.pageBreakBefore !== null && style.pageBreakBefore !== undefined) {
+            pageBreakBefore = style.pageBreakBefore;
+        }
+
+        if (style.edges) {
+            edges = style.edges;
+        }
+    }
+
+    if (xmlParagraph) {
+        if (xmlParagraph.spacingBefore !== null && xmlParagraph.spacingBefore !== undefined) {
+            spacingBefore = xmlParagraph.spacingBefore;
+        }
+
+        if (xmlParagraph.spacingAfter !== null && xmlParagraph.spacingAfter !== undefined) {
+            spacingAfter = xmlParagraph.spacingAfter;
+        }
+
+        if (xmlParagraph.pageBreakBefore !== null && xmlParagraph.pageBreakBefore !== undefined) {
+            pageBreakBefore = xmlParagraph.pageBreakBefore;
+        }
+
+        if (xmlParagraph.edges) {
+            edges = xmlParagraph.edges;
+        }
+    }
+
+    return {
+        spacingBefore,
+        spacingAfter,
+        pageBreakBefore: !! pageBreakBefore,
+        edges,
+    };
+}
+
+/**
  * @param {string} xml
  * @param {{ major: string|null, minor: string|null }} theme
  */
@@ -1502,7 +2285,7 @@ function readDocumentXml(xml, theme) {
     const grids = [];
 
     if (! xml) {
-        return { paragraphs, grids };
+        return { paragraphs, grids, sections: [], pageMargins: null };
     }
 
     const doc = parseXml(xml);
@@ -1512,7 +2295,14 @@ function readDocumentXml(xml, theme) {
         walkBlocks(body, theme, paragraphs, grids);
     }
 
-    return { paragraphs, grids };
+    const sectionInfo = readSections(body);
+
+    return {
+        paragraphs,
+        grids,
+        sections: sectionInfo.sections,
+        pageMargins: sectionInfo.pageMargins,
+    };
 }
 
 /**
@@ -1526,9 +2316,14 @@ function walkBlocks(el, theme, paragraphs, grids) {
         const name = localName(child);
 
         if (name === 'p') {
+            const properties = firstChild(child, 'pPr');
+
             paragraphs.push({
                 runs: readParagraphRuns(child, theme),
                 tabs: readTabs(child),
+                ...readParagraphLayout(properties),
+                breakAfter: sectionBreaksPage(firstChild(properties, 'sectPr'), false),
+                renderedBreak: paragraphHasRenderedBreak(child),
             });
         } else if (name === 'tbl') {
             grids.push(readGrid(child));
@@ -1743,10 +2538,17 @@ function parseStyles(xml, theme) {
             styles.defaultParagraphId = id;
         }
 
+        const paragraphProperties = firstChild(styleEl, 'pPr');
+        const layout = readParagraphLayout(paragraphProperties);
+
         styles.byId.set(id, {
             basedOn: attr(firstChild(styleEl, 'basedOn'), 'val'),
             props: readRPr(firstChild(styleEl, 'rPr'), theme),
-            tabs: readTabs(firstChild(styleEl, 'pPr'), true),
+            tabs: readTabs(paragraphProperties, true),
+            spacingBefore: layout.spacingBefore,
+            spacingAfter: layout.spacingAfter,
+            pageBreakBefore: layout.pageBreakBefore,
+            edges: layout.edges,
         });
     }
 

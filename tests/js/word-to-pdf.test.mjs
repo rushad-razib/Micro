@@ -123,6 +123,54 @@ test('tabs and repeated spaces keep the gap between witness labels', async () =>
     assert.ok(gaps[2] > 30, `repeated space gap was ${gaps[2]}`);
 });
 
+test('a cover section keeps its page border and starts the body on the next page', async () => {
+    const bytes = await coverDocx();
+    const result = await process({
+        files: [asFile(bytes, 'cover.docx')],
+        tool: 'word-to-pdf',
+        limits: { max_bytes: 5_000_000, max_pages: 20 },
+    });
+    const source = inflatePdf(new Uint8Array(await result.blob.arrayBuffer()));
+    const lines = textLines(source);
+    const cover = lines.flat().find((item) => item.text === 'COVER');
+    const foundation = lines.flat().find((item) => item.text === 'MARSUS');
+    const body = lines.flat().find((item) => item.text === 'BodyStarts');
+
+    assert.equal(result.meta.pageCount, 2);
+    assert.match(source, /1\.5 w/);
+    assert.ok(cover && cover.y > 700, `cover y was ${cover?.y}`);
+    assert.ok(foundation && foundation.y < 250, `foundation y was ${foundation?.y}`);
+    assert.ok(body && body.y > 700, `body y was ${body?.y}`);
+});
+
+test('a paragraph Word placed on the next page stays off the cover', async () => {
+    const bytes = await renderedBreakDocx();
+    const result = await process({
+        files: [asFile(bytes, 'break.docx')],
+        tool: 'word-to-pdf',
+        limits: { max_bytes: 5_000_000, max_pages: 20 },
+    });
+    const source = inflatePdf(new Uint8Array(await result.blob.arrayBuffer()));
+    const body = textLines(source).flat().find((item) => item.text === 'BodyStarts');
+
+    assert.equal(result.meta.pageCount, 2);
+    assert.ok(body && body.y > 700, `body y was ${body?.y}`);
+});
+
+test('one-inch page margins keep a full cover from pulling the next paragraph', async () => {
+    const bytes = await marginCoverDocx();
+    const result = await process({
+        files: [asFile(bytes, 'margins.docx')],
+        tool: 'word-to-pdf',
+        limits: { max_bytes: 5_000_000, max_pages: 20 },
+    });
+    const source = inflatePdf(new Uint8Array(await result.blob.arrayBuffer()));
+    const body = textLines(source).flat().find((item) => item.text === 'BodyStarts');
+
+    assert.equal(result.meta.pageCount, 2);
+    assert.ok(body && body.y > 700, `body y was ${body?.y}`);
+});
+
 /**
  * @param {Uint8Array} bytes
  */
@@ -223,6 +271,7 @@ function textLines(source) {
         const y = Math.round(Number(match[2]));
         const item = {
             x: Number(match[1]),
+            y,
             text: Buffer.from(match[3], 'hex').toString('latin1'),
         };
 
@@ -263,6 +312,127 @@ function visibleText(source) {
     }
 
     return text;
+}
+
+async function renderedBreakDocx() {
+    const zip = new JSZip();
+
+    zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>COVER TITLE</w:t></w:r></w:p>
+    <w:p>
+      <w:pPr>
+        <w:pBdr>
+          <w:top w:val="single" w:sz="12" w:space="4" w:color="000000"/>
+          <w:left w:val="single" w:sz="12" w:space="4" w:color="000000"/>
+          <w:bottom w:val="single" w:sz="12" w:space="4" w:color="000000"/>
+          <w:right w:val="single" w:sz="12" w:space="4" w:color="000000"/>
+        </w:pBdr>
+      </w:pPr>
+      <w:r><w:t>MARSUS Foundation</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:lastRenderedPageBreak/><w:t>BodyStarts</w:t></w:r>
+    </w:p>
+    <w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr>
+  </w:body>
+</w:document>`);
+    zip.file('word/styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>
+</w:styles>`);
+    zip.file('word/theme/theme1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:themeElements>
+  <a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme>
+</a:themeElements></a:theme>`);
+
+    return zip.generateAsync({ type: 'uint8array' });
+}
+
+async function marginCoverDocx() {
+    const zip = new JSZip();
+    const blanks = Array.from({ length: 41 }, () => '<w:p/>').join('');
+
+    zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    ${blanks}
+    <w:p><w:r><w:t>BodyStarts</w:t></w:r></w:p>
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1440" w:bottom="1440" w:left="1440" w:right="1440"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`);
+
+    zip.file('word/styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
+    <w:name w:val="Normal"/>
+  </w:style>
+</w:styles>`);
+
+    return zip.generateAsync({ type: 'uint8array' });
+}
+
+async function coverDocx() {
+    const zip = new JSZip();
+
+    zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:jc w:val="center"/></w:pPr>
+      <w:r><w:t>COVER TITLE</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:jc w:val="center"/></w:pPr>
+      <w:r><w:t>AND</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:jc w:val="center"/>
+        <w:sectPr>
+          <w:pgBorders w:offsetFrom="page">
+            <w:top w:val="single" w:sz="12" w:space="36" w:color="000000"/>
+            <w:left w:val="single" w:sz="12" w:space="36" w:color="000000"/>
+            <w:bottom w:val="single" w:sz="12" w:space="36" w:color="000000"/>
+            <w:right w:val="single" w:sz="12" w:space="36" w:color="000000"/>
+          </w:pgBorders>
+          <w:vAlign w:val="both"/>
+          <w:type w:val="nextPage"/>
+        </w:sectPr>
+      </w:pPr>
+      <w:r><w:t>MARSUS Foundation</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:t>BodyStarts</w:t></w:r>
+    </w:p>
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`);
+
+    zip.file('word/styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
+    <w:name w:val="Normal"/>
+  </w:style>
+</w:styles>`);
+
+    zip.file('word/theme/theme1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <a:themeElements>
+    <a:fontScheme name="Office">
+      <a:majorFont><a:latin typeface="Calibri"/></a:majorFont>
+      <a:minorFont><a:latin typeface="Calibri"/></a:minorFont>
+    </a:fontScheme>
+  </a:themeElements>
+</a:theme>`);
+
+    return zip.generateAsync({ type: 'uint8array' });
 }
 
 async function styledDocx() {
