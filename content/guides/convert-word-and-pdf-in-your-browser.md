@@ -12,7 +12,7 @@ Server converters can chase perfect layout because they run Word or LibreOffice 
 
 ## Word to PDF
 
-Use a `.docx` with mostly body text. You get a readable PDF without uploading. Expect imperfect match on complex tables, text boxes, and brand fonts. Old `.doc` files must be saved as DOCX first.
+Use a `.docx`. You get a selectable PDF without uploading. Tables, bold, italic, and font family are kept. Fonts map to Helvetica, Times, or Courier, so a brand font will not match the Word file exactly. Text boxes, columns, and floating shapes can still shift. Old `.doc` files must be saved as DOCX first.
 
 ## PDF to Word
 

@@ -97,7 +97,7 @@ export function documentIsland(config) {
             }
 
             if (this.isWordToPdf) {
-                return 'DOCX only. Text-focused conversion. Stays on this device.';
+                return 'DOCX only. Keeps tables, bold, and font style. Stays on this device.';
             }
 
             if (this.isPdfToWord) {

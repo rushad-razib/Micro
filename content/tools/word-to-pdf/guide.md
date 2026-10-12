@@ -1,10 +1,10 @@
 ## How Word to PDF works here
 
-The tool reads a `.docx` file in your browser (via Mammoth), lays out the text into pages, and writes a PDF with pdf-lib. The file is not uploaded.
+The tool reads a `.docx` file in your browser, keeps paragraphs, tables, and character formatting, and writes a selectable PDF with pdf-lib. The file is not uploaded.
 
 ## What to expect
 
-Text-heavy letters, reports, and notes convert well enough to share as PDF. Complex multi-column layouts, embedded objects, and exact font matching are outside this release. That honesty keeps the privacy promise intact on shared hosting without a server converter.
+Letters, reports, and notes keep their tables, bold and italic text, sizes, and font family. Families map to standard PDF fonts: Calibri, Aptos, and Arial become Helvetica; Times, Cambria, and Georgia become Times; Courier and Consolas become Courier. Text boxes, columns, floating shapes, and the exact proprietary font files are outside this release. That keeps the conversion on this device, with no server converter.
 
 ## How to use it
 

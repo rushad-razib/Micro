@@ -50,6 +50,17 @@ class EngineIsolationTest extends TestCase
         $this->assertStringContainsString("from 'docx'", $office);
         $this->assertStringContainsString('pdfjs-dist', $office);
 
+        $documentIsland = File::get(resource_path('js/document-island.js'));
+        $docxPdf = File::get(resource_path('js/engines/docx-to-pdf.js'));
+
+        foreach ([$appJs, $documentIsland, $indexJs] as $source) {
+            $this->assertStringNotContainsString("from 'jszip'", $source);
+            $this->assertStringNotContainsString('@xmldom/xmldom', $source);
+        }
+
+        $this->assertStringContainsString("from 'jszip'", $docxPdf);
+        $this->assertStringContainsString('@xmldom/xmldom', $docxPdf);
+
         $this->assertStringNotContainsString('background-remove.js', $appJs);
         $this->assertStringNotContainsString('background-remove.js', $islandJs);
         $this->assertStringContainsString("import('./background-remove.js')", $indexJs);

@@ -1,6 +1,6 @@
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 import mammoth from 'mammoth';
+import { layoutDocument } from './docx-to-pdf.js';
 import {
     assertMaxBytes,
     isDocxFile,
@@ -46,74 +46,41 @@ async function wordToPdf(file, limits) {
 
     assertMaxBytes(file, limits);
 
-    let text;
+    const source = await file.arrayBuffer();
+    const bytes = source.slice(0);
+    let document = null;
 
     try {
-        const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
-        text = (result.value || '').replace(/\r\n/g, '\n').trim();
-    } catch {
-        throw new Error('Could not read this DOCX. Try re-saving it from Word or LibreOffice.');
+        // Node's Mammoth reads `buffer`; the browser build reads `arrayBuffer`.
+        await mammoth.convertToHtml(
+            { arrayBuffer: bytes, buffer: bytes },
+            {
+                transformDocument(node) {
+                    document = node;
+
+                    return node;
+                },
+            },
+        );
+    } catch (error) {
+        if (! document) {
+            throw unreadableDocx(error);
+        }
     }
 
-    if (! text) {
-        throw new Error('No readable text was found in this document.');
+    if (! document) {
+        throw unreadableDocx();
     }
 
-    const paragraphs = text.split(/\n+/).filter(Boolean);
-    const maxPages = limits?.max_pages ?? 100;
-    const pdf = await PDFDocument.create();
-    const font = await pdf.embedFont(StandardFonts.Helvetica);
-    const fontSize = 11;
-    const lineHeight = 14;
-    const margin = 56;
-    const pageWidth = 595.28;
-    const pageHeight = 841.89;
-    const maxWidth = pageWidth - margin * 2;
-
-    let page = pdf.addPage([pageWidth, pageHeight]);
-    let y = pageHeight - margin;
-
-    const ensurePage = () => {
-        if (pdf.getPageCount() > maxPages) {
-            throw new Error(`This document is too long for conversion (max about ${maxPages} pages).`);
+    try {
+        return await layoutDocument(document, source.slice(0), limits);
+    } catch (error) {
+        if (isKnownConversionError(error)) {
+            throw error;
         }
 
-        page = pdf.addPage([pageWidth, pageHeight]);
-        y = pageHeight - margin;
-    };
-
-    for (const paragraph of paragraphs) {
-        const lines = wrapText(paragraph, font, fontSize, maxWidth);
-
-        for (const line of lines) {
-            if (y < margin + lineHeight) {
-                ensurePage();
-            }
-
-            page.drawText(line, {
-                x: margin,
-                y,
-                size: fontSize,
-                font,
-                color: rgb(0.1, 0.1, 0.1),
-            });
-            y -= lineHeight;
-        }
-
-        y -= lineHeight * 0.6;
+        throw unreadableDocx(error);
     }
-
-    const bytes = await pdf.save();
-
-    return {
-        blob: new Blob([bytes], { type: 'application/pdf' }),
-        mime: 'application/pdf',
-        extension: 'pdf',
-        meta: {
-            pageCount: pdf.getPageCount(),
-            note: 'Text-focused conversion. Complex Word layouts may not match.',
-        },
-    };
 }
 
 async function pdfToWord(file, limits) {
@@ -183,26 +150,25 @@ async function pdfToWord(file, limits) {
     };
 }
 
-function wrapText(text, font, fontSize, maxWidth) {
-    const words = text.split(/\s+/);
-    const lines = [];
-    let current = '';
+/**
+ * @param {unknown} [cause]
+ */
+function unreadableDocx(cause) {
+    const error = new Error('Could not read this DOCX. Try re-saving it from Word or LibreOffice.');
 
-    for (const word of words) {
-        const next = current ? `${current} ${word}` : word;
-        const width = font.widthOfTextAtSize(next, fontSize);
-
-        if (width > maxWidth && current) {
-            lines.push(current);
-            current = word;
-        } else {
-            current = next;
-        }
+    if (cause) {
+        error.cause = cause;
     }
 
-    if (current) {
-        lines.push(current);
-    }
+    return error;
+}
 
-    return lines.length ? lines : [''];
+/**
+ * @param {unknown} error
+ */
+function isKnownConversionError(error) {
+    return error instanceof Error && (
+        error.message.startsWith('No readable text')
+        || error.message.startsWith('This document is too long')
+    );
 }
