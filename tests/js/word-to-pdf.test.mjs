@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { inflateSync } from 'node:zlib';
+import { inflateSync, deflateSync } from 'node:zlib';
 import {
     AlignmentType,
     Document,
@@ -188,6 +188,74 @@ test('a centered picture sits in the middle of the line', async () => {
     const image = imagePositions(source)[0];
 
     assert.ok(image && image.x > 200, `image x was ${image?.x}`);
+});
+
+test('a letter page keeps the Word paper size', async () => {
+    const bytes = await letterDocx();
+    const source = await pdfSource(bytes);
+
+    assert.match(source, /\/MediaBox\s*\[\s*0\s+0\s+612\s+792\s*\]/);
+});
+
+test('an inline picture uses the Word display size', async () => {
+    const bytes = await extentImageDocx();
+    const result = await process({
+        files: [asFile(bytes, 'extent.docx')],
+        tool: 'word-to-pdf',
+        limits: { max_bytes: 5_000_000, max_pages: 20 },
+    });
+    const pdfBytes = new Uint8Array(await result.blob.arrayBuffer());
+    const source = inflatePdf(pdfBytes);
+    const draw = source.match(/([\d.]+) 0 0 ([\d.]+) 0 0 cm\s+1 0 0 1 0 0 cm\s+\/\S+\s+Do/);
+    const width = Number(draw?.[1]);
+    const height = Number(draw?.[2]);
+
+    assert.equal(result.meta.pageCount, 2);
+    assert.ok(draw, 'image was not drawn');
+    assert.ok(Math.abs(width - 72) < 1, `image width was ${width}`);
+    assert.ok(Math.abs(height - 36) < 1, `image height was ${height}`);
+});
+
+test('a title page with an empty first footer is not numbered', async () => {
+    const bytes = await titlePageDocx();
+    const result = await process({
+        files: [asFile(bytes, 'title.docx')],
+        tool: 'word-to-pdf',
+        limits: { max_bytes: 5_000_000, max_pages: 20 },
+    });
+    const streams = contentStreams(new Uint8Array(await result.blob.arrayBuffer()));
+    const cover = streams.find((stream) => streamText(stream).includes('CoverOnly'));
+    const body = streams.find((stream) => streamText(stream).includes('BodyStarts'));
+    const coverNumbers = textLines(cover || '').flat().filter((item) => item.text === '1');
+    const bodyNumbers = textLines(body || '').flat().filter((item) => item.text === '2');
+
+    assert.equal(result.meta.pageCount, 2);
+    assert.equal(coverNumbers.length, 0);
+    assert.equal(bodyNumbers.length, 1);
+});
+
+test('a contents entry keeps its page number on the heading line', async () => {
+    const bytes = await contentsDocx();
+    const lines = textLines(await pdfSource(bytes));
+    const line = lines.find((items) => items.some((item) => item.text === 'Chapter'));
+
+    assert.ok(line, 'contents line was missing');
+    assert.ok(line.some((item) => item.text === '2'), `line was ${line.map((item) => item.text).join('|')}`);
+    assert.equal(line.some((item) => item.text === '9'), false);
+    assert.ok(line.some((item) => item.text === '.'));
+});
+
+test('an arrow the standard fonts cannot encode becomes an ASCII arrow', async () => {
+    const doc = new Document({
+        sections: [{
+            children: [new Paragraph({ children: [new TextRun('Go \u2192 next')] })],
+        }],
+    });
+    const bytes = await Packer.toBuffer(doc);
+    const text = visibleText(await pdfSource(bytes));
+
+    assert.match(text, /Go -> next/);
+    assert.doesNotMatch(text, /Go \? next/);
 });
 
 test('one-inch page margins keep a full cover from pulling the next paragraph', async () => {
@@ -650,4 +718,200 @@ async function styledDocx() {
 </a:theme>`);
 
     return zip.generateAsync({ type: 'uint8array' });
+}
+
+async function letterDocx() {
+    const zip = new JSZip();
+
+    zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>LetterPage</w:t></w:r></w:p>
+    <w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>
+  </w:body>
+</w:document>`);
+    zip.file('word/styles.xml', minimalStyles());
+
+    return zip.generateAsync({ type: 'uint8array' });
+}
+
+async function extentImageDocx() {
+    const zip = new JSZip();
+    const lines = Array.from({ length: 32 }, () => '<w:p><w:r><w:t>Line</w:t></w:r></w:p>').join('');
+
+    zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="png" ContentType="image/png"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`);
+    zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`);
+    zip.file('word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>
+</Relationships>`);
+    zip.file('word/media/image1.png', solidPng(500, 350));
+    zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+  <w:body>
+    <w:p>
+      <w:r>
+        <w:drawing>
+          <wp:inline>
+            <wp:extent cx="914400" cy="457200"/>
+            <wp:docPr id="1" name="logo"/>
+            <a:graphic>
+              <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                <pic:pic>
+                  <pic:blipFill>
+                    <a:blip r:embed="rId4"/>
+                  </pic:blipFill>
+                </pic:pic>
+              </a:graphicData>
+            </a:graphic>
+          </wp:inline>
+        </w:drawing>
+      </w:r>
+    </w:p>
+    ${lines}
+    <w:p><w:r><w:br w:type="page"/></w:r></w:p>
+    <w:p><w:r><w:t>BodyStarts</w:t></w:r></w:p>
+    <w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr>
+  </w:body>
+</w:document>`);
+    zip.file('word/styles.xml', minimalStyles());
+
+    return zip.generateAsync({ type: 'uint8array' });
+}
+
+async function titlePageDocx() {
+    const zip = new JSZip();
+
+    zip.file('word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer2.xml"/>
+</Relationships>`);
+    zip.file('word/footer1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:p>
+    <w:pPr><w:jc w:val="center"/></w:pPr>
+    <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+    <w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>
+    <w:r><w:fldChar w:fldCharType="end"/></w:r>
+  </w:p>
+</w:ftr>`);
+    zip.file('word/footer2.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:p/>
+</w:ftr>`);
+    zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t>CoverOnly</w:t></w:r></w:p>
+    <w:p><w:r><w:br w:type="page"/></w:r></w:p>
+    <w:p><w:r><w:t>BodyStarts</w:t></w:r></w:p>
+    <w:sectPr>
+      <w:footerReference w:type="default" r:id="rId2"/>
+      <w:footerReference w:type="first" r:id="rId3"/>
+      <w:titlePg/>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`);
+    zip.file('word/styles.xml', minimalStyles());
+
+    return zip.generateAsync({ type: 'uint8array' });
+}
+
+async function contentsDocx() {
+    const zip = new JSZip();
+
+    zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr>
+        <w:tabs><w:tab w:val="right" w:leader="dot" w:pos="12000"/></w:tabs>
+      </w:pPr>
+      <w:hyperlink w:anchor="_Toc1">
+        <w:r><w:t>Chapter</w:t></w:r>
+        <w:r><w:tab/></w:r>
+        <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+        <w:r><w:instrText xml:space="preserve"> PAGEREF _Toc1 \\h </w:instrText></w:r>
+        <w:r><w:fldChar w:fldCharType="separate"/></w:r>
+        <w:r><w:t>9</w:t></w:r>
+        <w:r><w:fldChar w:fldCharType="end"/></w:r>
+      </w:hyperlink>
+    </w:p>
+    <w:p><w:r><w:br w:type="page"/></w:r></w:p>
+    <w:p>
+      <w:bookmarkStart w:id="1" w:name="_Toc1"/>
+      <w:r><w:t>Chapter</w:t></w:r>
+      <w:bookmarkEnd w:id="1"/>
+    </w:p>
+    <w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr>
+  </w:body>
+</w:document>`);
+    zip.file('word/styles.xml', minimalStyles());
+
+    return zip.generateAsync({ type: 'uint8array' });
+}
+
+function minimalStyles() {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>
+</w:styles>`;
+}
+
+function solidPng(width, height) {
+    const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(width, 0);
+    ihdr.writeUInt32BE(height, 4);
+    ihdr[8] = 8;
+    ihdr[9] = 2;
+    const raw = Buffer.alloc((width * 3 + 1) * height);
+
+    for (let y = 0; y < height; y += 1) {
+        raw[y * (width * 3 + 1)] = 0;
+    }
+
+    return Buffer.concat([
+        signature,
+        pngChunk('IHDR', ihdr),
+        pngChunk('IDAT', deflateSync(raw)),
+        pngChunk('IEND', Buffer.alloc(0)),
+    ]);
+}
+
+function pngChunk(type, data) {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const out = Buffer.alloc(12 + data.length);
+    out.writeUInt32BE(data.length, 0);
+    body.copy(out, 4);
+    out.writeInt32BE(pngCrc(body), 8 + data.length);
+
+    return out;
+}
+
+function pngCrc(buffer) {
+    let crc = ~0;
+
+    for (const byte of buffer) {
+        crc ^= byte;
+
+        for (let bit = 0; bit < 8; bit += 1) {
+            const mask = -(crc & 1);
+            crc = (crc >>> 1) ^ (0xedb88320 & mask);
+        }
+    }
+
+    return (~crc) | 0;
 }

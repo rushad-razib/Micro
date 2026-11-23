@@ -16,7 +16,7 @@ Use a `.docx`. You get a selectable PDF without uploading. Tables, bold, italic,
 
 ## PDF to Word
 
-The PDF needs a text layer. Exports from Word usually work; phone scans of paper do not until OCR exists elsewhere. The DOCX is for editing paragraphs, not cloning magazine layouts.
+The PDF needs a text layer. Exports from Word usually work. Lines, alignment, bold, pictures, ruled tables, and a page frame are kept. Columns and scans are not.
 
 ## When to use other PDF tools
 

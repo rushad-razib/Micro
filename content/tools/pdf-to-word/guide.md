@@ -4,7 +4,7 @@ PDF.js reads the text layer of your PDF in the browser. That text is written int
 
 ## What to expect
 
-Digital PDFs exported from Word or similar apps usually have a text layer and convert into editable paragraphs. Image-only scans do not: there is no OCR in this release. Layout will be simpler than the original PDF.
+Digital PDFs exported from Word or similar apps usually have a text layer. Lines, alignment, bold, pictures, ruled tables, and a page frame are kept. Columns and scans are not: there is no OCR in this release.
 
 ## How to use it
 

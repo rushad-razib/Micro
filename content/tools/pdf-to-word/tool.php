@@ -8,7 +8,7 @@ return [
     'engine' => 'office-convert',
     'processing' => 'browser',
     'title' => 'PDF to Word',
-    'promise' => 'Extract a PDF text layer into a DOCX on this device—no upload, no OCR.',
+    'promise' => 'Turn a text PDF into an editable DOCX on this device. Lines, alignment, bold, pictures, ruled tables, and a page frame are kept.',
     'seo_title' => 'Convert PDF to Word DOCX in your browser',
     'seo_description' => 'Turn a text PDF into an editable DOCX locally. Requires a text layer; scanned pages need OCR elsewhere.',
     'related' => ['word-to-pdf', 'split-pdf', 'merge-pdf'],
@@ -20,7 +20,7 @@ return [
     'faq' => [
         ['question' => 'Is my PDF uploaded?', 'answer' => 'No. Text is extracted in this browser tab and written into a DOCX locally.'],
         ['question' => 'Why did a scanned PDF fail?', 'answer' => 'Scans are pictures without a text layer. This release has no OCR. Use a searchable PDF or OCR tool first.'],
-        ['question' => 'Will formatting match the PDF?', 'answer' => 'You get editable paragraphs close to reading order. Exact fonts and multi-column layout are not guaranteed.'],
+        ['question' => 'Will formatting match the PDF?', 'answer' => 'Lines, alignment, bold, pictures, ruled tables, and a page frame are kept. Columns and scans are not.'],
     ],
     'suffix' => 'converted',
 ];

@@ -101,7 +101,7 @@ export function documentIsland(config) {
             }
 
             if (this.isPdfToWord) {
-                return 'PDF with a text layer. No OCR. Stays on this device.';
+                return 'PDF with a text layer. Keeps lines, alignment, bold, pictures, ruled tables, and a page frame. Columns and scans are not.';
             }
 
             return 'PDF files. Stays on this device.';

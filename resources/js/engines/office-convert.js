@@ -1,6 +1,7 @@
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 import mammoth from 'mammoth';
 import { layoutDocument } from './docx-to-pdf.js';
+import { layoutPdf, openPdf } from './pdf-to-docx.js';
 import {
     assertMaxBytes,
     isDocxFile,
@@ -90,64 +91,22 @@ async function pdfToWord(file, limits) {
 
     assertMaxBytes(file, limits);
 
-    const pdfjs = await import('pdfjs-dist');
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-        'pdfjs-dist/build/pdf.worker.min.mjs',
+    const source = await readFileBytes(file);
+    const standardFontFile = new URL(
+        'pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf',
         import.meta.url,
-    ).toString();
-
-    let pdf;
-
-    try {
-        pdf = await pdfjs.getDocument({ data: await readFileBytes(file) }).promise;
-    } catch {
-        throw new Error('Could not open this PDF. It may be damaged or password-protected.');
-    }
-
+    );
+    const pdf = await openPdf(source.slice(), {
+        workerSrc: new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString(),
+        standardFontDataUrl: new URL('./', standardFontFile).href,
+    });
     const maxPages = limits?.max_pages ?? 100;
 
     if (pdf.numPages > maxPages) {
         throw new Error(`This PDF has too many pages (max ${maxPages}).`);
     }
 
-    const paragraphs = [];
-
-    for (let i = 1; i <= pdf.numPages; i += 1) {
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        const strings = content.items.map((item) => ('str' in item ? item.str : '')).filter(Boolean);
-        const pageText = strings.join(' ').replace(/\s+/g, ' ').trim();
-
-        if (pageText) {
-            paragraphs.push(pageText);
-        }
-    }
-
-    if (paragraphs.length === 0) {
-        throw new Error('No text layer found. Scanned PDFs need OCR elsewhere before conversion.');
-    }
-
-    const doc = new Document({
-        sections: [{
-            children: paragraphs.map((text) => new Paragraph({
-                children: [new TextRun(text)],
-                spacing: { after: 200 },
-            })),
-        }],
-    });
-
-    const blob = await Packer.toBlob(doc);
-
-    return {
-        blob,
-        mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        extension: 'docx',
-        meta: {
-            pageCount: pdf.numPages,
-            paragraphCount: paragraphs.length,
-            note: 'Editable text extraction. Layout will be simpler than the PDF.',
-        },
-    };
+    return layoutPdf(pdf, source);
 }
 
 /**

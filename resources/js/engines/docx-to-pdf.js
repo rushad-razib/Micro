@@ -102,11 +102,23 @@ export async function layoutDocument(document, arrayBuffer, limits = {}) {
         throw new Error('No readable text was found in this document.');
     }
 
+    const maxPages = limits?.max_pages ?? 100;
+    const pageNumber = await readPageNumber(zip, documentXml);
+
+    if (documentHasPageRefs(document)) {
+        const probe = await PDFDocument.create();
+        const probeLayout = new PdfLayout(probe, maxPages, defaultTab, xml.pageSize);
+        probeLayout.recordBookmarks = true;
+        configureLayout(probeLayout, xml, prepared, pageNumber);
+        probeLayout.preparePieces(document, styles);
+        await probeLayout.bindFonts(document);
+        await probeLayout.drawDocument(document.children || []);
+        replacePageRefs(document, probeLayout.bookmarkPages);
+    }
+
     const pdf = await PDFDocument.create();
-    const layout = new PdfLayout(pdf, limits?.max_pages ?? 100, defaultTab);
-    layout.pageMargins = xml.pageMargins;
-    layout.pageNumber = await readPageNumber(zip, documentXml);
-    layout.sections = prepared.sections;
+    const layout = new PdfLayout(pdf, maxPages, defaultTab, xml.pageSize);
+    configureLayout(layout, xml, prepared, pageNumber);
     layout.preparePieces(document, styles);
     await layout.bindFonts(document);
 
@@ -130,15 +142,19 @@ class PdfLayout {
     /**
      * @param {PDFDocument} pdf
      * @param {number} maxPages
+     * @param {number} [defaultTab]
+     * @param {{ width: number, height: number }|null} [pageSize]
      */
-    constructor(pdf, maxPages, defaultTab = 36) {
+    constructor(pdf, maxPages, defaultTab = 36, pageSize = null) {
         this.pdf = pdf;
         this.maxPages = maxPages;
         this.defaultTab = defaultTab > 0 ? defaultTab : 36;
+        this.pageWidth = pageSize?.width > 0 ? pageSize.width : PAGE_WIDTH;
+        this.pageHeight = pageSize?.height > 0 ? pageSize.height : PAGE_HEIGHT;
         this.page = null;
         this.x = MARGIN;
-        this.y = PAGE_HEIGHT - MARGIN;
-        this.width = PAGE_WIDTH - (MARGIN * 2);
+        this.y = this.pageHeight - MARGIN;
+        this.width = this.pageWidth - (MARGIN * 2);
         this.canBreak = true;
         this.images = new Map();
         this.sections = null;
@@ -150,6 +166,8 @@ class PdfLayout {
         this.pageOwner = null;
         this.box = null;
         this.frame = { left: MARGIN, right: MARGIN, top: MARGIN, bottom: MARGIN };
+        this.bookmarkPages = new Map();
+        this.recordBookmarks = false;
         this.addPage();
     }
 
@@ -160,11 +178,31 @@ class PdfLayout {
 
         this.finishPageBorder();
         this.flushBox();
-        this.page = this.pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+        this.page = this.pdf.addPage([this.pageWidth, this.pageHeight]);
         this.pageBorderPainted = false;
         this.pageContent = false;
         this.pageOwner = null;
         this.applyFrame(true);
+    }
+
+    /**
+     * An empty page adopts the section's paper size. A page that already
+     * holds body text keeps the size it was opened with.
+     */
+    applySectionPage() {
+        const size = this.section?.pageSize;
+
+        if (! size || this.pageContent) {
+            return;
+        }
+
+        if (Math.abs(size.width - this.pageWidth) < 0.5 && Math.abs(size.height - this.pageHeight) < 0.5) {
+            return;
+        }
+
+        this.pageWidth = size.width;
+        this.pageHeight = size.height;
+        this.page.setSize(this.pageWidth, this.pageHeight);
     }
 
     /**
@@ -184,10 +222,10 @@ class PdfLayout {
 
         this.frame = { ...margins };
         this.x = this.frame.left;
-        this.width = Math.max(PAGE_WIDTH - this.frame.left - this.frame.right, 8);
+        this.width = Math.max(this.pageWidth - this.frame.left - this.frame.right, 8);
 
-        const top = PAGE_HEIGHT - this.frame.top;
-        const untouched = Math.abs(this.y - (PAGE_HEIGHT - MARGIN)) < 0.5;
+        const top = this.pageHeight - this.frame.top;
+        const untouched = Math.abs(this.y - (this.pageHeight - MARGIN)) < 0.5;
 
         if (resetCursor || untouched || this.y > top) {
             this.y = top;
@@ -208,14 +246,19 @@ class PdfLayout {
         const pages = this.pdf.getPages();
 
         pages.forEach((page, index) => {
+            if (spec.skipFirst && index === 0) {
+                return;
+            }
+
             const text = String(spec.start + index);
             const width = font.widthOfTextAtSize(text, spec.size);
+            const pageWidth = page.getWidth();
             let x = spec.margins.left;
 
             if (spec.align === 'center' || spec.align === 'both') {
-                x = (PAGE_WIDTH - width) / 2;
+                x = (pageWidth - width) / 2;
             } else if (spec.align === 'right' || spec.align === 'end') {
-                x = PAGE_WIDTH - spec.margins.right - width;
+                x = pageWidth - spec.margins.right - width;
             }
 
             page.drawText(text, {
@@ -297,8 +340,8 @@ class PdfLayout {
         this.page.drawRectangle({
             x: insets.left,
             y: insets.bottom,
-            width: Math.max(PAGE_WIDTH - insets.left - insets.right, 8),
-            height: Math.max(PAGE_HEIGHT - insets.top - insets.bottom, 8),
+            width: Math.max(this.pageWidth - insets.left - insets.right, 8),
+            height: Math.max(this.pageHeight - insets.top - insets.bottom, 8),
             borderColor: border.color,
             borderWidth: border.width,
         });
@@ -374,7 +417,7 @@ class PdfLayout {
      * @param {number} height
      */
     ensureSpace(height) {
-        const top = PAGE_HEIGHT - this.frame.top;
+        const top = this.pageHeight - this.frame.top;
 
         if (this.canBreak && this.y - height < this.frame.bottom && this.y < top - 0.5) {
             this.addPage();
@@ -505,6 +548,7 @@ class PdfLayout {
      */
     async drawSection(nodes, section, hasMore) {
         this.section = section;
+        this.applySectionPage();
         this.claimPage();
         this.applyFrame();
         const extra = await this.sectionShift(nodes, section);
@@ -517,7 +561,7 @@ class PdfLayout {
             }
         }
 
-        const top = PAGE_HEIGHT - this.frame.top;
+        const top = this.pageHeight - this.frame.top;
 
         if (section.breakAfter && hasMore && this.canBreak && this.y < top - 0.5) {
             this.flushBox();
@@ -606,9 +650,7 @@ class PdfLayout {
      * @param {object} paragraph
      */
     async drawParagraph(paragraph) {
-        const top = PAGE_HEIGHT - this.frame.top;
-
-        this.markPageContent();
+        const top = this.pageHeight - this.frame.top;
 
         if (paragraph._pageBreakBefore && this.canBreak && this.y < top - 0.5) {
             this.addPage();
@@ -619,6 +661,9 @@ class PdfLayout {
         if (before > this.y - this.frame.bottom && this.canBreak && this.y < top - 0.5) {
             this.addPage();
         }
+
+        this.noteBookmarks(paragraph);
+        this.markPageContent();
 
         if (before > 0) {
             const room = Math.max(this.y - this.frame.bottom, 0);
@@ -688,6 +733,10 @@ class PdfLayout {
                         });
                     }
 
+                    if (token.leader && token.width > 8 && token.font) {
+                        this.drawTabLeader(token, x, baseline);
+                    }
+
                     if (token.underline && token.width > 0) {
                         this.page.drawLine({
                             start: { x, y: baseline - 1.5 },
@@ -707,8 +756,60 @@ class PdfLayout {
         this.y -= paragraphAfter(paragraph);
         this.extendBox();
 
-        if (paragraph._breakAfter && this.canBreak && this.y < PAGE_HEIGHT - this.frame.top - 0.5) {
+        if (paragraph._breakAfter && this.canBreak && this.y < this.pageHeight - this.frame.top - 0.5) {
             this.addPage();
+        }
+    }
+
+    /**
+     * @param {object} paragraph
+     */
+    noteBookmarks(paragraph) {
+        if (! this.recordBookmarks || ! paragraph._bookmarks?.length) {
+            return;
+        }
+
+        const start = this.pageNumber?.start ?? 1;
+        const number = start + this.pdf.getPageCount() - 1;
+
+        for (const name of paragraph._bookmarks) {
+            if (! this.bookmarkPages.has(name)) {
+                this.bookmarkPages.set(name, number);
+            }
+        }
+    }
+
+    /**
+     * @param {{ leader?: string|null, width: number, font: object, size: number }} token
+     * @param {number} x
+     * @param {number} baseline
+     */
+    drawTabLeader(token, x, baseline) {
+        if (token.leader !== 'dot' && token.leader !== 'middleDot') {
+            return;
+        }
+
+        const glyph = token.leader === 'middleDot' ? '·' : '.';
+        let dotWidth = 3;
+
+        try {
+            dotWidth = token.font.widthOfTextAtSize(glyph === '·' ? '.' : glyph, token.size) || 3;
+        } catch {
+            dotWidth = 3;
+        }
+
+        const step = Math.max(dotWidth * 2, 4);
+        let cursor = x + dotWidth;
+
+        while (cursor < x + token.width - dotWidth) {
+            this.page.drawText('.', {
+                x: cursor,
+                y: baseline,
+                size: token.size,
+                font: token.font,
+                color: TEXT_COLOR,
+            });
+            cursor += step;
         }
     }
 
@@ -946,13 +1047,15 @@ class PdfLayout {
             return null;
         }
 
-        const maxHeight = PAGE_HEIGHT - (MARGIN * 2);
-        const scale = Math.min(1, maxWidth / embedded.width, maxHeight / embedded.height);
+        const maxHeight = Math.max(this.pageHeight - this.frame.top - this.frame.bottom, 8);
+        const width = image.displayWidth > 0 ? image.displayWidth : embedded.width;
+        const height = image.displayHeight > 0 ? image.displayHeight : embedded.height;
+        const scale = Math.min(1, maxWidth / width, maxHeight / height);
 
         return {
             embedded,
-            width: embedded.width * scale,
-            height: embedded.height * scale,
+            width: width * scale,
+            height: height * scale,
         };
     }
 
@@ -1039,6 +1142,9 @@ function prepareDocument(document, xml, styles) {
                 node._pageBreakBefore = layout.pageBreakBefore || !! xmlParagraph?.renderedBreak;
                 node._breakAfter = !! xmlParagraph?.breakAfter;
                 node._edges = layout.edges;
+                node._bookmarks = xmlParagraph?.bookmarks || [];
+                node._pageRefs = xmlParagraph?.pageRefs || [];
+                assignImageExtents(node, xmlParagraph?.extents || []);
 
                 if (paragraphHasText(node) || paragraphHasImage(node)) {
                     hasContent = true;
@@ -1073,6 +1179,126 @@ function prepareDocument(document, xml, styles) {
         hasContent,
         sections: matchSections(document, xml.sections),
     };
+}
+
+/**
+ * @param {PdfLayout} layout
+ * @param {{ pageMargins: object|null }} xml
+ * @param {{ sections: object[]|null }} prepared
+ * @param {object|null} pageNumber
+ */
+function configureLayout(layout, xml, prepared, pageNumber) {
+    layout.pageMargins = xml.pageMargins;
+    layout.pageNumber = pageNumber;
+    layout.sections = prepared.sections;
+}
+
+/**
+ * @param {object} document
+ */
+function documentHasPageRefs(document) {
+    const paragraphs = [];
+    collectParagraphs(document.children || [], paragraphs);
+
+    return paragraphs.some((paragraph) => paragraph._pageRefs?.length);
+}
+
+/**
+ * Replace a contents entry's cached page with the page the bookmark was drawn on.
+ *
+ * @param {object} document
+ * @param {Map<string, number>} pages
+ */
+function replacePageRefs(document, pages) {
+    const paragraphs = [];
+    collectParagraphs(document.children || [], paragraphs);
+
+    for (const paragraph of paragraphs) {
+        for (const ref of paragraph._pageRefs || []) {
+            const page = pages.get(ref.anchor);
+
+            if (! page || String(page) === ref.cached) {
+                continue;
+            }
+
+            replaceExactText(paragraph, ref.cached, String(page));
+            ref.cached = String(page);
+        }
+    }
+}
+
+/**
+ * @param {object} paragraph
+ * @param {string} from
+ * @param {string} to
+ */
+function replaceExactText(paragraph, from, to) {
+    const visit = (children) => {
+        for (const child of children || []) {
+            if (child?.type === 'text' && String(child.value).trim() === from) {
+                child.value = to;
+
+                return true;
+            }
+
+            if (child?.children && visit(child.children)) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    visit(paragraph.children);
+
+    for (const run of paragraph._xmlRuns || []) {
+        for (const part of run.inlines || []) {
+            if (part?.type === 'text' && String(part.value).trim() === from) {
+                part.value = to;
+
+                return;
+            }
+        }
+    }
+}
+
+/**
+ * @param {object} paragraph
+ * @param {{ width: number, height: number }[]} extents
+ */
+function assignImageExtents(paragraph, extents) {
+    if (! extents.length) {
+        return;
+    }
+
+    const images = [];
+    collectTypedNodes(paragraph.children, 'image', images);
+
+    if (images.length !== extents.length) {
+        return;
+    }
+
+    images.forEach((image, index) => {
+        image.displayWidth = extents[index].width;
+        image.displayHeight = extents[index].height;
+    });
+}
+
+/**
+ * @param {object[]|undefined} nodes
+ * @param {string} type
+ * @param {object[]} found
+ */
+function collectTypedNodes(nodes, type, found) {
+    for (const node of nodes || []) {
+        if (node?.type === type) {
+            found.push(node);
+        }
+
+        if (node?.children) {
+            collectTypedNodes(node.children, type, found);
+        }
+    }
 }
 
 /**
@@ -1467,15 +1693,19 @@ function wrapSegments(segments, maxWidth, options = {}) {
         const token = tokens[index];
 
         if (token.tab || token.ptab) {
-            let width = tabAdvance(origin + lineWidth, token, tabs, defaultTab, followingWidth(tokens, index), rightEdge);
+            let advance = tabAdvance(origin + lineWidth, token, tabs, defaultTab, followingWidth(tokens, index), rightEdge);
 
-            if (width === null && line.length) {
+            if (advance === null && line.length) {
                 pushLine();
-                width = tabAdvance(origin, token, tabs, defaultTab, followingWidth(tokens, index), rightEdge);
+                advance = tabAdvance(origin, token, tabs, defaultTab, followingWidth(tokens, index), rightEdge);
             }
 
-            line.push({ ...token, width: width ?? 0 });
-            lineWidth += width ?? 0;
+            line.push({
+                ...token,
+                width: advance?.width ?? 0,
+                leader: advance?.leader || null,
+            });
+            lineWidth += advance?.width ?? 0;
             continue;
         }
 
@@ -1565,31 +1795,41 @@ function justifyLine(line, maxWidth) {
  * @param {number} rightEdge
  */
 function tabAdvance(x, token, tabs, defaultTab, following, rightEdge) {
+    const stop = token.ptab ? null : nextTabStop(x, tabs, defaultTab);
     const target = token.ptab
         ? ptabTarget(token.ptab, following, rightEdge)
-        : tabTarget(nextTabStop(x, tabs, defaultTab), following);
+        : tabTarget(stop, following, rightEdge);
 
     if (target > rightEdge && x > 0.5) {
         return null;
     }
 
-    return Math.max(0, Math.min(Math.max(target, x), rightEdge) - x);
+    return {
+        width: Math.max(0, Math.min(Math.max(target, x), rightEdge) - x),
+        leader: stop?.leader || null,
+    };
 }
 
 /**
  * @param {{ pos: number, val: string }} stop
  * @param {number} following
  */
-function tabTarget(stop, following) {
+function tabTarget(stop, following, rightEdge) {
+    let pos = stop.pos;
+
+    if ((stop.val === 'right' || stop.val === 'end' || stop.val === 'center') && pos > rightEdge) {
+        pos = rightEdge;
+    }
+
     if (stop.val === 'right' || stop.val === 'end') {
-        return stop.pos - following;
+        return pos - following;
     }
 
     if (stop.val === 'center') {
-        return stop.pos - (following / 2);
+        return pos - (following / 2);
     }
 
-    return stop.pos;
+    return pos;
 }
 
 /**
@@ -1683,6 +1923,13 @@ function lineSize(line) {
  * @param {string} text
  * @param {object} font
  */
+const GLYPH_FALLBACKS = {
+    '\u2190': '<-',
+    '\u2192': '->',
+    '\u2194': '<->',
+    '\u21d2': '=>',
+};
+
 function sanitize(text, font) {
     let safe = '';
 
@@ -1691,7 +1938,7 @@ function sanitize(text, font) {
             font.encodeText(char);
             safe += char;
         } catch {
-            safe += '?';
+            safe += GLYPH_FALLBACKS[char] || '?';
         }
     }
 
@@ -1991,13 +2238,192 @@ async function readPageNumber(zip, documentXml) {
     const start = Number(attr(firstChild(sect, 'pgNumType'), 'start'));
     const margins = readMargins(sect) || { left: MARGIN, right: MARGIN, top: MARGIN, bottom: MARGIN };
 
+    const titlePage = readOnOff(firstChild(sect, 'titlePg')) === true;
+    const firstFooter = footerReference(sect, 'first');
+    const firstXml = await readFooterXml(zip, rels, firstFooter);
+
     return {
         align,
         size,
         offset: Number.isFinite(footerTwips) && footerTwips > 0 ? footerTwips / 20 : 36,
         start: Number.isFinite(start) && start > 0 ? start : 1,
         margins,
+        skipFirst: titlePage && ! /\bPAGE\b/.test(firstXml || ''),
     };
+}
+
+/**
+ * @param {object|null|undefined} sect
+ * @param {string} type
+ */
+function footerReference(sect, type) {
+    return elementChildren(sect).find((child) => {
+        return localName(child) === 'footerReference' && (attr(child, 'type') || 'default') === type;
+    }) || null;
+}
+
+/**
+ * @param {JSZip} zip
+ * @param {string} relsXml
+ * @param {object|null} reference
+ */
+async function readFooterXml(zip, relsXml, reference) {
+    const id = attr(reference, 'id');
+
+    if (! id || ! relsXml) {
+        return '';
+    }
+
+    const rel = descendants(parseXml(relsXml), 'Relationship').find((node) => attr(node, 'Id') === id);
+    const target = String(attr(rel, 'Target') || '').replace(/^\/+/, '');
+
+    if (! /footer/i.test(target)) {
+        return '';
+    }
+
+    return readZipText(zip, target.startsWith('word/') ? target : `word/${target.replace(/^\.\.\//, '')}`);
+}
+
+/**
+ * @param {object|null|undefined} sectPr
+ */
+function readPageSize(sectPr) {
+    const size = firstChild(sectPr, 'pgSz');
+
+    if (! size) {
+        return null;
+    }
+
+    const width = Number(attr(size, 'w')) / 20;
+    const height = Number(attr(size, 'h')) / 20;
+
+    if (! (width >= 72 && height >= 72 && width <= 2000 && height <= 2000)) {
+        return null;
+    }
+
+    return { width, height };
+}
+
+/**
+ * @param {string|null} leader
+ */
+function tabLeader(leader) {
+    if (leader === 'dot' || leader === 'middleDot') {
+        return leader;
+    }
+
+    return null;
+}
+
+/**
+ * @param {object} paragraph
+ */
+function readParagraphMarks(paragraph) {
+    const bookmarks = [];
+    const pageRefs = [];
+    const seen = new Set();
+
+    const walk = (el) => {
+        for (const child of elementChildren(el)) {
+            const name = localName(child);
+
+            if (name === 'bookmarkStart') {
+                const mark = attr(child, 'name');
+
+                if (mark && ! seen.has(mark)) {
+                    seen.add(mark);
+                    bookmarks.push(mark);
+                }
+            } else if (name === 'hyperlink') {
+                const anchor = attr(child, 'anchor');
+                const cached = anchor ? pageRefResult(child) : '';
+
+                if (anchor && cached) {
+                    pageRefs.push({ anchor, cached });
+                }
+            }
+
+            walk(child);
+        }
+    };
+
+    walk(paragraph);
+
+    return { bookmarks, pageRefs };
+}
+
+/**
+ * The displayed result of a PAGEREF field inside a contents hyperlink.
+ *
+ * @param {object} hyperlink
+ */
+function pageRefResult(hyperlink) {
+    const state = { saw: false, inResult: false, text: '' };
+
+    const walk = (el) => {
+        for (const child of elementChildren(el)) {
+            const name = localName(child);
+
+            if (name === 'instrText' && /PAGEREF/.test(textOf(child))) {
+                state.saw = true;
+            }
+
+            if (name === 'fldChar') {
+                const type = attr(child, 'fldCharType');
+
+                if (type === 'separate' && state.saw) {
+                    state.inResult = true;
+                }
+
+                if (type === 'end') {
+                    state.inResult = false;
+                    state.saw = false;
+                }
+            }
+
+            if (name === 't' && state.inResult) {
+                state.text += textOf(child);
+            } else if (name !== 't') {
+                walk(child);
+            }
+        }
+    };
+
+    walk(hyperlink);
+    const cached = state.text.trim();
+
+    return /^\d+$/.test(cached) ? cached : '';
+}
+
+/**
+ * Inline pictures use Word's display size, in points, when the drawing count matches.
+ *
+ * @param {object} paragraph
+ */
+function readDrawingExtents(paragraph) {
+    const extents = [];
+
+    const walk = (el) => {
+        for (const child of elementChildren(el)) {
+            const name = localName(child);
+
+            if (name === 'drawing' || name === 'pict') {
+                const extent = firstDescendant(child, 'extent');
+                const cx = Number(attr(extent, 'cx'));
+                const cy = Number(attr(extent, 'cy'));
+
+                if (cx > 0 && cy > 0) {
+                    extents.push({ width: cx / 12700, height: cy / 12700 });
+                }
+            } else {
+                walk(child);
+            }
+        }
+    };
+
+    walk(paragraph);
+
+    return extents;
 }
 
 /**
@@ -2005,18 +2431,24 @@ async function readPageNumber(zip, documentXml) {
  */
 function readSections(body) {
     if (! body) {
-        return { sections: [], pageMargins: null };
+        return { sections: [], pageMargins: null, pageSize: null };
     }
 
     const sections = [];
     let blocks = 0;
     let pageMargins = null;
+    let pageSize = null;
 
     const close = (sectPr, isFinal) => {
         const margins = readMargins(sectPr);
+        const explicitSize = readPageSize(sectPr);
 
         if (margins) {
             pageMargins = margins;
+        }
+
+        if (explicitSize) {
+            pageSize = explicitSize;
         }
 
         if (blocks <= 0) {
@@ -2029,6 +2461,7 @@ function readSections(body) {
             vAlign: readVAlign(sectPr),
             border: readPageBorder(sectPr),
             margins,
+            pageSize,
         });
         blocks = 0;
     };
@@ -2056,7 +2489,7 @@ function readSections(body) {
 
     visit(body);
 
-    return { sections, pageMargins };
+    return { sections, pageMargins, pageSize: sections[0]?.pageSize || pageSize };
 }
 
 /**
@@ -2372,6 +2805,7 @@ function readDocumentXml(xml, theme) {
         grids,
         sections: sectionInfo.sections,
         pageMargins: sectionInfo.pageMargins,
+        pageSize: sectionInfo.pageSize,
     };
 }
 
@@ -2391,6 +2825,8 @@ function walkBlocks(el, theme, paragraphs, grids) {
             paragraphs.push({
                 runs: readParagraphRuns(child, theme),
                 tabs: readTabs(child),
+                extents: readDrawingExtents(child),
+                ...readParagraphMarks(child),
                 ...readParagraphLayout(properties),
                 breakAfter: sectionBreaksPage(firstChild(properties, 'sectPr'), false),
                 renderedBreak: paragraphHasRenderedBreak(child),
@@ -2533,6 +2969,7 @@ function readTabs(el, isProperties = false) {
             return {
                 pos: Number.isFinite(twips) ? twips / 20 : 0,
                 val: attr(tab, 'val') || 'left',
+                leader: tabLeader(attr(tab, 'leader')),
             };
         })
         .filter((tab) => tab.val === 'clear' || tab.val === 'bar' || tab.pos > 0);
