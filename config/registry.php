@@ -20,6 +20,7 @@ return [
         'metadata-strip',
         'pdf-toolkit',
         'office-convert',
+        'land-calculator',
     ],
 
     'policy_paths' => [

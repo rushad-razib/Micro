@@ -102,7 +102,7 @@ final class ToolRegistry
      */
     public function headerClusters(): Collection
     {
-        $order = ['images' => 0, 'documents' => 1];
+        $order = ['images' => 0, 'documents' => 1, 'calculators' => 2];
 
         return $this->clusters()
             ->filter(fn (Cluster $cluster) => $cluster->isLive())

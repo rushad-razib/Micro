@@ -4,7 +4,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import JSZip from 'jszip';
-import { layoutPdf, openPdf } from '../../resources/js/engines/pdf-to-docx.js';
+import { imageToPng, layoutPdf, openPdf } from '../../resources/js/engines/pdf-to-docx.js';
 
 const fontDir = `${path.join(path.dirname(fileURLToPath(import.meta.url)), '../../node_modules/pdfjs-dist/standard_fonts').replaceAll('\\', '/')}/`;
 
@@ -54,6 +54,76 @@ test('a small PNG is stored under word/media', async () => {
     const media = Object.keys(zip.files).filter((name) => name.startsWith('word/media/') && ! name.endsWith('/'));
 
     assert.ok(media.length > 0);
+});
+
+test('short cover lines stacked closer than a line stay in separate paragraphs', async () => {
+    const xml = await convert(await coverFieldsPdf());
+    const faculty = paragraphWith(xml, 'FacultyLine');
+
+    assert.equal(faculty.includes('CourseName'), false);
+    assert.ok(paragraphWith(xml, 'CourseName'));
+});
+
+test('a line that reaches the right margin joins the line under it', async () => {
+    const xml = await convert(await wrappedPdf());
+    const paragraph = paragraphWith(xml, 'WrappedLine');
+
+    assert.equal(paragraph.includes('Continuation'), true);
+});
+
+test('a raised ordinal stays on its number', async () => {
+    const xml = await convert(await ordinalPdf());
+    const date = paragraphWith(xml, 'Mark12');
+
+    assert.equal(date.includes('th'), true);
+    assert.equal(date.includes('CoverField'), false);
+});
+
+test('a bitmap with no raw bytes is stored as a PNG', () => {
+    const pixels = new Uint8ClampedArray(2 * 2 * 4);
+    pixels[0] = 255;
+    pixels[3] = 255;
+    const previous = globalThis.OffscreenCanvas;
+
+    globalThis.OffscreenCanvas = class FakeOffscreenCanvas {
+        constructor(width, height) {
+            this.width = width;
+            this.height = height;
+        }
+
+        getContext() {
+            return {
+                drawImage() {},
+                getImageData() {
+                    return { data: pixels };
+                },
+            };
+        }
+    };
+
+    try {
+        const png = imageToPng({
+            data: null,
+            bitmap: { width: 2, height: 2 },
+            width: 2,
+            height: 2,
+        });
+        const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+
+        assert.equal(png[0], 137);
+        assert.equal(png[1], 80);
+        assert.equal(png[2], 78);
+        assert.equal(png[3], 71);
+        assert.equal(view.getUint32(16), 2);
+        assert.equal(view.getUint32(20), 2);
+        assert.equal(imageToPng({ data: null, width: 2, height: 2 }), null);
+    } finally {
+        if (previous === undefined) {
+            delete globalThis.OffscreenCanvas;
+        } else {
+            globalThis.OffscreenCanvas = previous;
+        }
+    }
 });
 
 /**
@@ -200,6 +270,69 @@ async function tablePdf() {
     page.drawText('Beta', { x: 200, y: 438, size: 12, font });
 
     return doc.save();
+}
+
+async function coverFieldsPdf() {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([595.28, 841.89]);
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const size = 12;
+
+    drawCentered(page, font, 'FacultyLine', 700, size);
+    drawCentered(page, font, 'CourseName', 684, size);
+
+    return doc.save();
+}
+
+async function wrappedPdf() {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([595.28, 841.89]);
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const size = 12;
+    let text = 'WrappedLine';
+
+    while (72 + font.widthOfTextAtSize(text, size) < page.getWidth() - 72) {
+        text += ' word';
+    }
+
+    page.drawText(text, { x: 72, y: 700, size, font });
+    page.drawText('Continuation', { x: 72, y: 684, size, font });
+
+    return doc.save();
+}
+
+async function ordinalPdf() {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([595.28, 841.89]);
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+
+    page.drawText('CoverField', { x: 220, y: 520, size: 12, font });
+
+    const base = 'Mark12';
+    const baseWidth = font.widthOfTextAtSize(base, 12);
+
+    page.drawText(base, { x: 220, y: 500, size: 12, font });
+    page.drawText('th', { x: 220 + baseWidth, y: 504, size: 7, font });
+
+    return doc.save();
+}
+
+/**
+ * @param {import('pdf-lib').PDFPage} page
+ * @param {import('pdf-lib').PDFFont} font
+ * @param {string} text
+ * @param {number} y
+ * @param {number} size
+ */
+function drawCentered(page, font, text, y, size) {
+    const width = font.widthOfTextAtSize(text, size);
+
+    page.drawText(text, {
+        x: (page.getWidth() - width) / 2,
+        y,
+        size,
+        font,
+    });
 }
 
 async function imagePdf() {

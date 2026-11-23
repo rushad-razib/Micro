@@ -1,6 +1,6 @@
 <x-layouts.app
-    :document-title="$siteName.' — free image and PDF tools in your browser'"
-    :meta-description="'Free image and PDF tools processed in this browser. We do not upload your files.'"
+    :document-title="$siteName.' — free image, PDF, and calculator tools in your browser'"
+    :meta-description="'Free image, PDF, and calculator tools in this browser. We do not upload your files or what you type.'"
     :canonical="url('/')"
     :json-ld="[[
         '@context' => 'https://schema.org',
@@ -10,7 +10,7 @@
     ]]"
 >
     <h1 class="type-h1">{{ $siteName }}</h1>
-    <p class="mt-2 text-muted">Free image and PDF tools, processed in the browser.</p>
+    <p class="mt-2 text-muted">Free image, PDF, and calculator tools, processed in the browser.</p>
     <x-privacy-sentence class="mt-3" />
 
     @foreach ($sections as $section)

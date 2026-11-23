@@ -19,7 +19,7 @@
 
     <h1 class="mt-3 type-h1">{{ $cluster->title }}</h1>
     <p class="mt-2 text-muted">{{ $cluster->promise }}</p>
-    <x-privacy-sentence class="mt-3" />
+    <x-privacy-sentence class="mt-3" :kind="$cluster->id === 'calculators' ? 'calculator' : 'image'" />
 
     <ul class="mt-8 grid gap-3 sm:grid-cols-2">
         @foreach ($tools->concat($presets) as $tool)

@@ -5,7 +5,7 @@
         <div class="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
             <div class="max-w-xs">
                 <p class="text-lg font-semibold text-chrome-ink">{{ $siteName }}</p>
-                <p class="site-chrome-muted mt-2 text-sm">Free image and PDF tools. Processed in this browser.</p>
+                <p class="site-chrome-muted mt-2 text-sm">Free image, PDF, and calculator tools. Processed in this browser.</p>
             </div>
 
             <div>

@@ -5,6 +5,7 @@ const engines = {
     'squoosh-compress': () => import('./squoosh-compress.js'),
     'pdf-toolkit': () => import('./pdf-toolkit.js'),
     'office-convert': () => import('./office-convert.js'),
+    'land-calculator': () => import('./land-calculator.js'),
 };
 
 /**

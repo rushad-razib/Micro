@@ -362,12 +362,14 @@ function paragraphsFrom(lines, pageWidth) {
 
         const align = lineAlign(line, pageWidth);
         const size = line.items.reduce((max, item) => Math.max(max, item.size), 12);
+        const right = lineRight(line);
         const previous = paragraphs.at(-1);
         const gap = previous ? previous.baseline - line.y : 0;
 
-        if (previous && previous.align === align && gap > 0 && gap < previous.size * 1.8) {
+        if (previous && previous.align === align && gap > 0 && gap < previous.size * 1.8 && previous.right >= pageWidth - 72) {
             appendRuns(previous.runs, runs);
             previous.baseline = line.y;
+            previous.right = right;
             continue;
         }
 
@@ -376,6 +378,7 @@ function paragraphsFrom(lines, pageWidth) {
             align,
             top: line.y + size,
             baseline: line.y,
+            right,
             size,
             runs,
         });
@@ -874,12 +877,22 @@ function isRule(segment) {
 }
 
 /**
+ * @param {object} line
+ */
+function lineRight(line) {
+    return line.items.reduce((max, item) => Math.max(max, item.x + (item.width || 0)), 0);
+}
+
+/**
+ * Encode a pdf.js image. The browser build supplies an ImageBitmap and leaves
+ * `data` null; Node supplies the raw pixels.
+ *
  * @param {object|null} image
  */
-function imageToPng(image) {
-    const width = image.width || 0;
-    const height = image.height || 0;
-    const data = image.data;
+export function imageToPng(image) {
+    const width = image?.width || 0;
+    const height = image?.height || 0;
+    const data = image?.data || pixelsFromBitmap(image?.bitmap, width, height);
 
     if (! width || ! height || ! data) {
         return null;
@@ -912,6 +925,53 @@ function imageToPng(image) {
     }
 
     return rgbaToPng(width, height, rgba);
+}
+
+/**
+ * @param {object|undefined} bitmap
+ * @param {number} width
+ * @param {number} height
+ */
+function pixelsFromBitmap(bitmap, width, height) {
+    if (! bitmap || ! width || ! height) {
+        return null;
+    }
+
+    const canvas = drawingCanvas(width, height);
+
+    if (! canvas) {
+        return null;
+    }
+
+    const context = canvas.getContext('2d');
+
+    if (! context) {
+        return null;
+    }
+
+    context.drawImage(bitmap, 0, 0, width, height);
+
+    return context.getImageData(0, 0, width, height).data;
+}
+
+/**
+ * @param {number} width
+ * @param {number} height
+ */
+function drawingCanvas(width, height) {
+    if (typeof OffscreenCanvas !== 'undefined') {
+        return new OffscreenCanvas(width, height);
+    }
+
+    if (typeof document !== 'undefined') {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        return canvas;
+    }
+
+    return null;
 }
 
 /**

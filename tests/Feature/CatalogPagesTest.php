@@ -86,6 +86,32 @@ class CatalogPagesTest extends TestCase
             ->assertSee('documentIsland', false);
     }
 
+    public function test_land_calculator_is_a_live_calculators_section(): void
+    {
+        config(['registry.show_drafts' => false]);
+
+        $this->get('/calculators')
+            ->assertOk()
+            ->assertSee('Calculators', false)
+            ->assertSee('Bangladesh land calculator', false)
+            ->assertSee('The calculation runs in this browser. Nothing you type is uploaded.', false);
+
+        $this->get('/land-calculator')
+            ->assertOk()
+            ->assertSee('data-engine="land-calculator"', false)
+            ->assertSee('calculatorIsland', false)
+            ->assertSee('From', false)
+            ->assertSee('To', false)
+            ->assertSee('Shotangsho (শতাংশ)', false)
+            ->assertSee('Katha (কাঠা)', false)
+            ->assertSee('The calculation runs in this browser. Nothing you type is uploaded.', false);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('Calculators', false)
+            ->assertSee('All calculators', false);
+    }
+
     public function test_header_mega_menu_lists_cluster_tools(): void
     {
         config(['registry.show_drafts' => false]);

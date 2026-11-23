@@ -67,11 +67,17 @@
             >
                 @if ($tool->cluster === 'documents')
                     <x-document-island :tool="$tool" />
+                @elseif ($tool->cluster === 'calculators')
+                    <x-calculator-island />
                 @else
                     <x-tool-island :tool="$tool" :default-frame="$defaultFrame" />
                 @endif
                 <div class="mt-4">
-                    <x-privacy-sentence :kind="$tool->cluster === 'documents' ? 'document' : 'image'" />
+                    <x-privacy-sentence :kind="match ($tool->cluster) {
+                        'documents' => 'document',
+                        'calculators' => 'calculator',
+                        default => 'image',
+                    }" />
                 </div>
             </div>
         </div>
