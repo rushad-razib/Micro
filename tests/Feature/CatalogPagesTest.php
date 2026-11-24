@@ -112,6 +112,35 @@ class CatalogPagesTest extends TestCase
             ->assertSee('All calculators', false);
     }
 
+    public function test_road_distance_page_shows_the_field_aid(): void
+    {
+        config(['registry.show_drafts' => false]);
+
+        $this->get('/calculators')
+            ->assertOk()
+            ->assertSee('Road distance', false)
+            ->assertSee('Unit conversions and field measurements that run in your browser.', false);
+
+        $this->get('/road-distance')
+            ->assertOk()
+            ->assertSee('data-engine="road-measure"', false)
+            ->assertSee('roadMeasureIsland', false)
+            ->assertSee('Mark start', false)
+            ->assertSee('Mark end', false)
+            ->assertSee('This is a field aid. The ± figure is the phone’s estimate, not a survey tolerance. A weak fix produces no distance.', false)
+            ->assertSee('Positions stay in this browser. We do not upload them.', false)
+            ->assertSee('Is this a survey measurement?', false)
+            ->assertDontSee('calculatorIsland', false);
+
+        $this->get('/privacy')
+            ->assertOk()
+            ->assertSee('The road distance tool reads your device location while you measure.', false);
+
+        $this->get('/sitemap.xml')
+            ->assertOk()
+            ->assertSee(url('/road-distance'), false);
+    }
+
     public function test_header_mega_menu_lists_cluster_tools(): void
     {
         config(['registry.show_drafts' => false]);
