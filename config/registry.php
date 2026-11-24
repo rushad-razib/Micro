@@ -21,7 +21,6 @@ return [
         'pdf-toolkit',
         'office-convert',
         'land-calculator',
-        'road-measure',
     ],
 
     'policy_paths' => [

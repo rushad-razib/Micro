@@ -67,23 +67,17 @@
             >
                 @if ($tool->cluster === 'documents')
                     <x-document-island :tool="$tool" />
-                @elseif ($tool->engine === 'road-measure')
-                    <x-road-measure-island />
                 @elseif ($tool->cluster === 'calculators')
                     <x-calculator-island />
                 @else
                     <x-tool-island :tool="$tool" :default-frame="$defaultFrame" />
                 @endif
                 <div class="mt-4">
-                    @php
-                        $privacyKind = match (true) {
-                            $tool->engine === 'road-measure' => 'measure',
-                            $tool->cluster === 'documents' => 'document',
-                            $tool->cluster === 'calculators' => 'calculator',
-                            default => 'image',
-                        };
-                    @endphp
-                    <x-privacy-sentence :kind="$privacyKind" />
+                    <x-privacy-sentence :kind="match ($tool->cluster) {
+                        'documents' => 'document',
+                        'calculators' => 'calculator',
+                        default => 'image',
+                    }" />
                 </div>
             </div>
         </div>
