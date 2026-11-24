@@ -127,8 +127,11 @@ class CatalogPagesTest extends TestCase
             ->assertSee(url('/merge-pdf'), false)
             ->assertSee('All image tools', false)
             ->assertSee('All pdf tools', false)
-            ->assertSee('grid-template-columns: repeat(2', false)
-            ->assertSee('width: min(calc(100vw - 2rem), 28rem)', false);
+            ->assertSee('cluster-menu-panel', false)
+            ->assertSee('--menu-columns: 2', false)
+            ->assertSee('--panel-width: 28rem', false)
+            ->assertDontSee('block whitespace-nowrap', false)
+            ->assertDontSee('minmax(12rem', false);
     }
 
     public function test_policy_pages_are_available(): void

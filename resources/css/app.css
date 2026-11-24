@@ -98,6 +98,22 @@ body {
     color: var(--color-chrome-muted);
 }
 
+@utility cluster-menu-panel {
+    width: 100%;
+
+    @media (width >= 64rem) {
+        width: min(calc(100vw - 2rem), var(--panel-width));
+    }
+}
+
+@utility cluster-menu-grid {
+    grid-template-columns: minmax(0, 1fr);
+
+    @media (width >= 64rem) {
+        grid-template-columns: repeat(var(--menu-columns), minmax(0, 1fr));
+    }
+}
+
 @utility checkerboard {
     background-color: #d6d3d1;
     background-image:

@@ -44,8 +44,6 @@
                 @foreach ($orderedToolGroups as $clusterId => $tools)
                     @php
                         $toolList = collect($tools)->values();
-                        $columns = $toolList->chunk(5);
-                        $columnCount = max(1, $columns->count());
                         $cluster = $clusters[$clusterId] ?? null;
                     @endphp
                     <div class="min-w-0">
@@ -58,26 +56,18 @@
                                 {{ $clusterId }}
                             @endif
                         </p>
-                        <div
-                            class="mt-3 grid gap-x-6 gap-y-1"
-                            style="grid-template-columns: repeat({{ $columnCount }}, minmax(0, 1fr));"
-                        >
-                            @foreach ($columns as $column)
-                                <ul class="min-w-0 space-y-1">
-                                    @foreach ($column as $tool)
-                                        <li>
-                                            <a
-                                                href="{{ url('/'.$tool->slug) }}"
-                                                class="block truncate text-sm text-chrome-ink no-underline hover:text-white hover:underline"
-                                                title="{{ $tool->title }}"
-                                            >
-                                                {{ $tool->title }}
-                                            </a>
-                                        </li>
-                                    @endforeach
-                                </ul>
+                        <ul class="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+                            @foreach ($toolList as $tool)
+                                <li>
+                                    <a
+                                        href="{{ url('/'.$tool->slug) }}"
+                                        class="block text-sm text-chrome-ink no-underline hover:text-white hover:underline"
+                                    >
+                                        {{ $tool->title }}
+                                    </a>
+                                </li>
                             @endforeach
-                        </div>
+                        </ul>
                     </div>
                 @endforeach
             </div>
