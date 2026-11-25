@@ -6,6 +6,7 @@ const engines = {
     'pdf-toolkit': () => import('./pdf-toolkit.js'),
     'office-convert': () => import('./office-convert.js'),
     'land-calculator': () => import('./land-calculator.js'),
+    'road-measure': () => import('./road-measure.js'),
 };
 
 /**

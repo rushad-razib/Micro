@@ -11,7 +11,6 @@ class CatalogPagesTest extends TestCase
         config(['registry.show_drafts' => false]);
 
         $this->get('/not-a-real-tool')->assertNotFound();
-        $this->get('/road-distance')->assertNotFound();
         $this->get('/guides/not-a-real-guide')->assertNotFound();
     }
 
@@ -111,6 +110,35 @@ class CatalogPagesTest extends TestCase
             ->assertOk()
             ->assertSee('Calculators', false)
             ->assertSee('All calculators', false);
+    }
+
+    public function test_road_distance_page_shows_the_field_aid(): void
+    {
+        config(['registry.show_drafts' => false]);
+
+        $this->get('/calculators')
+            ->assertOk()
+            ->assertSee('Road distance', false)
+            ->assertSee('Unit conversions and field measurements that run in your browser.', false);
+
+        $this->get('/road-distance')
+            ->assertOk()
+            ->assertSee('data-engine="road-measure"', false)
+            ->assertSee('roadMeasureIsland', false)
+            ->assertSee('Mark start', false)
+            ->assertSee('Mark end', false)
+            ->assertSee('Hold still for about 30 seconds at each end. A distance is shown only when the fixes agree tightly enough for an error of 5 m or less.', false)
+            ->assertSee('Positions stay in this browser. We do not upload them.', false)
+            ->assertSee('Is this a survey measurement?', false)
+            ->assertDontSee('calculatorIsland', false);
+
+        $this->get('/privacy')
+            ->assertOk()
+            ->assertSee('The road distance tool reads your device location while you measure.', false);
+
+        $this->get('/sitemap.xml')
+            ->assertOk()
+            ->assertSee(url('/road-distance'), false);
     }
 
     public function test_header_mega_menu_lists_cluster_tools(): void

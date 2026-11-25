@@ -6,13 +6,14 @@
 
 <x-layouts.article
     :document-title="'Privacy — '.$siteName"
-    :meta-description="'How this site handles images, contact mail, logs, and advertising.'"
+    :meta-description="'How this site handles images, location, contact mail, logs, and advertising.'"
     :canonical="url('/privacy')"
 >
     <h1 class="type-h1">Privacy</h1>
     <div class="mt-6 max-w-3xl space-y-4 text-ink">
         <p>Operated by {{ $operator }}. Contact: <a href="mailto:{{ $email }}">{{ $email }}</a>.</p>
         <p>Images you open are processed in your browser. We do not upload them, and we do not keep a copy. There is no image upload endpoint. Server access logs may contain IP addresses and request paths. They do not contain file contents. Host log retention follows the hosting provider’s rotation (target: about 30 days or fewer).</p>
+        <p>The road distance tool reads your device location while you measure. Those positions stay in your browser. We do not upload them, and we do not keep a copy.</p>
         <p>The contact form collects name, email, and message so we can reply. Messages are emailed to the operator. We keep the mailbox copy only as long as needed to handle the thread. You can ask for access to or deletion of a contact message you sent.</p>
         <p>Consent choices for analytics and advertising are stored in your browser as described on the <a href="{{ url('/cookies') }}">cookies page</a>. Rejecting those categories does not stop the image tools.</p>
         @if ($adsConfigured)

@@ -2,6 +2,7 @@ import Alpine from 'alpinejs';
 import { bootConsent, consentBannerFactory } from './consent.js';
 import { calculatorIsland } from './calculator-island.js';
 import { documentIsland } from './document-island.js';
+import { roadMeasureIsland } from './road-measure-island.js';
 import { toolIsland } from './tool-island.js';
 
 bootConsent();
@@ -10,6 +11,7 @@ document.addEventListener('alpine:init', () => {
     Alpine.data('toolIsland', (config) => toolIsland(config));
     Alpine.data('documentIsland', (config) => documentIsland(config));
     Alpine.data('calculatorIsland', () => calculatorIsland());
+    Alpine.data('roadMeasureIsland', () => roadMeasureIsland());
     Alpine.data('consentBanner', () => consentBannerFactory());
 });
 
